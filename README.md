@@ -52,8 +52,10 @@ Node 20 or newer is required. `npx` fetches the package on first run.
 Nothing to configure. The first tool call that needs Onshape starts a sign-in
 and asks your client to show you the link; clients that support MCP's URL
 elicitation render it as a prompt, and the rest get the URL in the reply. The
-page that opens walks you through creating an Onshape API key and takes the
-pasted pair. Keys are verified against Onshape, then stored in your OS keychain.
+page that opens links straight to the key page for your Onshape stack and takes
+the pasted pair; tick **Read**, **Write** and **Delete** when you create the key
+so every tool here works. Keys are verified against Onshape, then stored in your
+OS keychain.
 
 Your credentials never pass through the assistant, the model or this project's
 authors — the exchange happens between your browser and a server bound to
@@ -140,7 +142,8 @@ These come from Onshape, not from this server:
   `onshape_create_document`.
 - **Deleting needs a key with delete permission.** Without it Onshape answers
   `403 Invalid API key state`; re-create the key at
-  [dev.onshape.com/keys](https://dev.onshape.com/keys) with Delete ticked.
+  [cad.onshape.com/user/developer/apiKeys](https://cad.onshape.com/user/developer/apiKeys)
+  with Delete ticked.
 - **The variable-table endpoint 404s on some accounts.** `onshape_set_variable`
   and `onshape_get_variables` fall back to `assignVariable` features, which work
   everywhere; `result.route` / `result.source` says which path was taken.

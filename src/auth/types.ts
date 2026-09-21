@@ -3,7 +3,7 @@
 export const DEFAULT_BASE_URL = "https://cad.onshape.com";
 export const DEFAULT_OAUTH_URL = "https://oauth.onshape.com";
 
-/** Onshape API key pair, sent as HTTP Basic auth. Created at https://dev.onshape.com/keys. */
+/** Onshape API key pair, sent as HTTP Basic auth. Created at https://cad.onshape.com/user/developer/apiKeys. */
 export interface ApiKeyCredentials {
   kind: "apiKey";
   accessKey: string;

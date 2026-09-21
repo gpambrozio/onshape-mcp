@@ -164,14 +164,13 @@ export function redirectUriFor(port: number): string {
   return `http://localhost:${port}/oauth/callback`;
 }
 
-/** Onshape hosts developer keys on the dev subdomain of the account's stack. */
+/** Onshape hosts developer keys under the account settings of its own stack. */
 export function keyPageFor(baseUrl: string): string {
   try {
     const host = new URL(baseUrl).hostname;
-    if (host === "cad.onshape.com") return "https://dev.onshape.com/keys";
-    return `https://${host}/appstore/dev-portal/keys`;
+    return `https://${host}/user/developer/apiKeys`;
   } catch {
-    return "https://dev.onshape.com/keys";
+    return `${DEFAULT_BASE_URL}/user/developer/apiKeys`;
   }
 }
 
@@ -202,11 +201,14 @@ async function handleApiKeyRequest(req: IncomingMessage, res: ServerResponse, ct
     const accessKey = (form.get("access_key") ?? "").trim();
     const secretKey = (form.get("secret_key") ?? "").trim();
     const baseUrl = (form.get("base_url") ?? "").trim() || ctx.baseUrl;
+    // The user may have pointed us at their own stack, so the retry form has to
+    // link to the key page over there rather than the one we started with.
+    const keysUrl = keyPageFor(baseUrl);
     if (!accessKey || !secretKey) {
       return send(
         res,
         400,
-        apiKeyForm({ nonce: ctx.nonce, baseUrl, keysUrl: ctx.keysUrl, error: "Both keys are required." }),
+        apiKeyForm({ nonce: ctx.nonce, baseUrl, keysUrl, error: "Both keys are required." }),
       );
     }
 
@@ -217,7 +219,7 @@ async function handleApiKeyRequest(req: IncomingMessage, res: ServerResponse, ct
     } catch (error) {
       // Keep the flow open so the user can correct a typo without restarting.
       const detail = error instanceof Error ? error.message : String(error);
-      send(res, 400, apiKeyForm({ nonce: ctx.nonce, baseUrl, keysUrl: ctx.keysUrl, error: detail }));
+      send(res, 400, apiKeyForm({ nonce: ctx.nonce, baseUrl, keysUrl, error: detail }));
     }
     return;
   }
