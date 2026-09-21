@@ -200,4 +200,10 @@ test("the advertised version matches the package", async () => {
   assert.equal(server.version, pkg.version);
   assert.equal(server.packages[0].identifier, pkg.name);
   assert.equal(server.packages[0].version, pkg.version);
+  // The MCP registry rejects a longer description with a 422, after npm has
+  // already published — which is exactly how 0.1.1 ended up half-released.
+  assert.ok(
+    server.description.length <= 100,
+    `server.json description is ${server.description.length} chars; the MCP registry allows 100`,
+  );
 });

@@ -1,6 +1,6 @@
 {
   "name": "@gpambrozio/onshape-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.gpambrozio/onshape",
   "description": "MCP server for Onshape CAD: 87 tools for documents, part studios, sketching, features, assemblies and export, with browser sign-in.",
   "license": "MIT",
