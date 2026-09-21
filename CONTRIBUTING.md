@@ -49,7 +49,26 @@ account for leftovers if it fails.
 
 ## Releasing
 
-Maintainers only: bump the version in `package.json` and `server.json`, update
-`CHANGELOG.md`, then push a matching tag (`v0.2.0`). CI publishes to npm with
-provenance, publishes to the MCP registry and attaches the Desktop bundle to the
-GitHub release.
+Maintainers only: bump the version in `package.json` and `server.json` (a test
+asserts they match `VERSION` in `src/server.ts`), update `CHANGELOG.md`, then
+push a matching tag (`v0.2.0`). The release workflow publishes to npm, publishes
+to the MCP registry and attaches the Desktop bundle to the GitHub release.
+
+Publishing is tokenless. npm authenticates the workflow through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers): GitHub mints an
+OIDC token, npm checks it against the publisher configured on the package, and
+attaches a provenance attestation. There is no npm token in this repository, and
+nothing to rotate.
+
+The trusted publisher on npmjs.com is configured as:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `gpambrozio` |
+| Repository | `onshape-mcp` |
+| Workflow filename | `release.yml` |
+| Environment | *(none)* |
+
+Renaming `.github/workflows/release.yml`, moving the repository, or changing its
+owner breaks publishing until the connection is recreated on npmjs.com — an
+existing connection cannot be edited.
