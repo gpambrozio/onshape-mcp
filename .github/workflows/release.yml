@@ -58,6 +58,24 @@ jobs:
             npm publish --access public
           fi
 
+      # npm accepts a publish before it serves it, and the MCP registry checks npm
+      # the moment we ask it to register: a 404 there fails the release after the
+      # package is already out, which is how 0.1.1 and 0.1.2 got stranded.
+      - name: Wait for npm to serve the new version
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          for attempt in $(seq 1 30); do
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is live on npm."
+              exit 0
+            fi
+            echo "Attempt $attempt: not visible yet, waiting 20s."
+            sleep 20
+          done
+          echo "$name@$version never appeared on npm after 10 minutes." >&2
+          exit 1
+
       - name: Build the Claude Desktop bundle
         run: npm run bundle
 
