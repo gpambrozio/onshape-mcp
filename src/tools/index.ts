@@ -26,6 +26,7 @@ export const allTools = [
   ...assemblyTools,
   ...drawingTools,
   ...featureStudioTools,
+  ...metadataTools,
   ...requestTools,
 ];
 

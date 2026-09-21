@@ -86,3 +86,23 @@ function restore(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
 }
+
+test("every tool module is actually registered", async () => {
+  // Guards the obvious slip: a new tools/*.ts file imported into tools/index.ts
+  // but never spread into allTools, which loses the whole module silently.
+  const { readdirSync } = await import("node:fs");
+  const { allTools } = await import("../src/tools/index.js");
+  const registered = new Set(allTools.map((tool) => tool.name));
+  const directory = new URL("../src/tools/", import.meta.url);
+
+  for (const file of readdirSync(directory).filter((name) => name.endsWith(".js") && name !== "index.js")) {
+    const module: Record<string, unknown> = await import(new URL(file, directory).href);
+    for (const [exportName, value] of Object.entries(module)) {
+      if (!Array.isArray(value) || !value.length) continue;
+      if (!value.every((item) => item && typeof item === "object" && "name" in item && "handler" in item)) continue;
+      for (const tool of value as Array<{ name: string }>) {
+        assert.ok(registered.has(tool.name), `${file} exports ${exportName} with unregistered tool ${tool.name}`);
+      }
+    }
+  }
+});

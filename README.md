@@ -1,7 +1,7 @@
 # onshape-mcp
 
 An MCP server for driving [Onshape](https://www.onshape.com) CAD from an AI
-assistant: 85 tools covering documents, Part Studios, sketching, solid features,
+assistant: 87 tools covering documents, Part Studios, sketching, solid features,
 assemblies, drawings, measurement and export — plus a browser login flow, so
 getting connected is one tool call rather than a detour through a developer
 portal and a config file.
@@ -84,6 +84,7 @@ Resolution order: environment variables → this server's store → an existing
 | Assemblies | `create_assembly`, `get_assembly`, `insert_instance`, `delete_instance`, `transform_instance`, `get_assembly_features`, `assembly_mate_connector`, `assembly_mate`, `assembly_group`, `assembly_add_feature`, `get_bom`, `assembly_mass_properties` |
 | Drawings | `create_drawing`, `get_drawing_views`, `export_drawing` |
 | Feature Studios | `create_feature_studio`, `get_feature_studio`, `set_feature_studio`, `get_feature_studio_specs` |
+| Metadata | `get_metadata`, `set_metadata` |
 | Escape hatch | `request` |
 
 All names are prefixed `onshape_`. Every tool returns `{"ok": true, "result": …}`
@@ -132,7 +133,7 @@ These come from Onshape, not from this server:
 
 ```bash
 npm run check     # type-check
-npm test          # 27 unit tests, no network
+npm test          # 28 unit tests, no network
 npm run build
 
 node scripts/smoke.mjs           # live read-only check against your account
