@@ -1,8 +1,18 @@
 {
-  "name": "onshape-mcp",
+  "name": "@gpambrozio/onshape-mcp",
   "version": "0.1.0",
-  "description": "Model Context Protocol server for Onshape CAD automation, with guided browser login (API key or OAuth 2.0).",
+  "mcpName": "io.github.gpambrozio/onshape",
+  "description": "MCP server for Onshape CAD: 87 tools for documents, part studios, sketching, features, assemblies and export, with browser sign-in.",
   "license": "MIT",
+  "author": "Gustavo Ambrozio",
+  "homepage": "https://github.com/gpambrozio/onshape-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gpambrozio/onshape-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gpambrozio/onshape-mcp/issues"
+  },
   "type": "module",
   "bin": {
     "onshape-mcp": "dist/index.js"
@@ -10,23 +20,33 @@
   "files": [
     "dist",
     "README.md",
-    "NOTICE"
+    "NOTICE",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "pretest": "tsc -p tsconfig.test.json",
     "test": "node --test .build-test/test/*.test.js",
-    "start": "node dist/index.js"
+    "bundle": "node scripts/build-mcpb.mjs",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run check && npm run build"
   },
   "keywords": [
     "onshape",
     "cad",
     "mcp",
-    "model-context-protocol"
+    "modelcontextprotocol",
+    "model-context-protocol",
+    "3d-printing",
+    "parametric",
+    "claude"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

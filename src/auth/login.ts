@@ -84,6 +84,9 @@ class Flow implements LoginFlow {
     clearTimeout(this.timer);
     this.server.close();
     this.server.closeAllConnections?.();
+    // An abandoned sign-in is not something to report on later; a completed or
+    // failed one is, so onshape_login_status can still explain what happened.
+    if (state === "cancelled" && current === this) current = null;
     this.settle();
   }
 }

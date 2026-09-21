@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.gpambrozio/onshape",
+  "description": "Drive Onshape CAD from an assistant: documents, part studios, sketching, solid features, assemblies, drawings, measurement and export, with browser sign-in.",
+  "repository": {
+    "url": "https://github.com/gpambrozio/onshape-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@gpambrozio/onshape-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ONSHAPE_ACCESS_KEY",
+          "description": "Onshape API access key. Optional: the server signs in through the browser when this is not set.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "ONSHAPE_SECRET_KEY",
+          "description": "Onshape API secret key, paired with ONSHAPE_ACCESS_KEY.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "ONSHAPE_MCP_OUTPUT_DIR",
+          "description": "Directory for exported STL/STEP files and renders. Defaults to the working directory.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -32,7 +32,8 @@ test("api keys round-trip through the file backend", () => {
     );
     assert.equal(saved.backend, "file");
     assert.equal(saved.path, path);
-    assert.equal(statSync(path).mode & 0o777, 0o600);
+    // Windows has no POSIX mode bits; chmod there is a no-op by design.
+    if (platform() !== "win32") assert.equal(statSync(path).mode & 0o777, 0o600);
 
     const loaded = store.resolve();
     assert.deepEqual(loaded, { kind: "apiKey", accessKey: "AK", secretKey: "SK", baseUrl: "https://cad.onshape.com" });

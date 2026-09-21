@@ -8,8 +8,9 @@
 
 import { z } from "zod";
 
-import { activeFlow, keyPageFor, redirectUriFor, startApiKeyFlow, startOAuthFlow, type LoginFlow } from "../auth/login.js";
+import { openBrowser } from "../auth/browser.js";
 import { verifyCredentials } from "../auth/verify.js";
+import { activeFlow, keyPageFor, redirectUriFor, startApiKeyFlow, startOAuthFlow, type LoginFlow } from "../auth/login.js";
 import { DEFAULT_BASE_URL, DEFAULT_OAUTH_URL, type Credentials } from "../auth/types.js";
 import type { ToolContext } from "./context.js";
 import { fail, ok, toolError } from "./shapes.js";
@@ -32,7 +33,7 @@ const storeShape = z
   .optional()
   .describe("Where to keep the credential: auto (keychain, else file), keychain, or file.");
 
-export const authTools: ToolDef[] = [
+export const authTools: ToolDef[] = ([
   {
     name: "onshape_login",
     title: "Sign in to Onshape",
@@ -153,17 +154,12 @@ export const authTools: ToolDef[] = [
       return ok(ctx, result);
     },
   },
-];
+  // Signing in cannot itself require being signed in.
+] as ToolDef[]).map((tool) => ({ ...tool, requiresAuth: false }));
 
 /** Verify, persist, and refresh the cached client. Returns the browser message. */
 function acceptor(ctx: ToolContext, store?: "auto" | "keychain" | "file") {
-  return async (creds: Credentials): Promise<string> => {
-    const identity = await verifyCredentials(creds, ctx.store);
-    const saved = ctx.store.save(creds, store ?? "auto");
-    ctx.reset();
-    const where = saved.backend === "keychain" ? "your keychain" : saved.path;
-    return `${identity.message} Credentials saved to ${where}.`;
-  };
+  return (creds: Credentials): Promise<string> => ctx.acceptCredentials(creds, store ?? "auto");
 }
 
 async function startOAuth(
@@ -225,14 +221,4 @@ async function report(
 function waitMs(seconds: unknown): number {
   const value = typeof seconds === "number" ? seconds : DEFAULT_WAIT_SECONDS;
   return Math.min(Math.max(value, 0), MAX_WAIT_SECONDS) * 1000;
-}
-
-/** Opening the browser is a convenience; the URL is returned either way. */
-async function openBrowser(url: string): Promise<void> {
-  try {
-    const { default: open } = await import("open");
-    await open(url);
-  } catch {
-    // Headless or sandboxed: the caller shows the URL instead.
-  }
 }

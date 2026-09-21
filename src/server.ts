@@ -3,6 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
+import type { AuthPrompter, PromptOutcome } from "./auth/prompt.js";
 import { allTools, ToolContext } from "./tools/index.js";
 
 export const VERSION = "0.1.0";
@@ -10,10 +11,11 @@ export const VERSION = "0.1.0";
 /** Shown to the model once, so individual tool descriptions can stay short. */
 const INSTRUCTIONS = `Drive Onshape CAD through its REST API.
 
-Signing in: if a tool reports that no credential is configured, call onshape_login.
-It opens the user's browser at a local page that walks them through creating an
-Onshape API key, then returns status "pending" — poll onshape_login_status until it
-reports "complete". onshape_set_api_key stores a key pair the user already has.
+Signing in happens by itself: the first tool call that needs Onshape starts a
+browser sign-in and asks the client to put the link in front of the user. Just
+call the tool you want. If a call comes back saying sign-in is still pending,
+show the user the URL it returns and retry, or poll onshape_login_status.
+onshape_set_api_key stores a key pair the user already has.
 
 Ids: most tools need a document, workspace and element id. They are the three
 segments of an Onshape URL: cad.onshape.com/documents/<doc>/w/<ws>/e/<elem>.
@@ -36,6 +38,7 @@ did not build. Read the error detail before retrying.`;
 export function createServer(): McpServer {
   const context = new ToolContext();
   const server = new McpServer({ name: "onshape-mcp", version: VERSION }, { instructions: INSTRUCTIONS });
+  context.prompter = clientPrompter(server);
 
   for (const tool of allTools) {
     server.registerTool(
@@ -46,9 +49,61 @@ export function createServer(): McpServer {
         inputSchema: tool.inputSchema,
         annotations: { title: tool.title, ...tool.annotations },
       },
-      (args: Record<string, unknown>) => tool.handler(args, context) as Promise<CallToolResult>,
+      async (args: Record<string, unknown>): Promise<CallToolResult> => {
+        if (tool.requiresAuth !== false) {
+          const auth = await context.ensureAuthenticated();
+          if (!auth.ok) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    { ok: false, error: auth.message ?? "Onshape sign-in required.", sign_in_url: auth.url ?? null },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+          }
+        }
+        return tool.handler(args, context) as Promise<CallToolResult>;
+      },
     );
   }
 
   return server;
+}
+
+/** Bridges the credential flows to the connected MCP client's URL elicitation.
+ *  Capabilities are only known after the client connects, so every method reads
+ *  them at call time. */
+function clientPrompter(server: McpServer): AuthPrompter {
+  const supportsUrl = (): boolean => Boolean(server.server.getClientCapabilities()?.elicitation?.url);
+
+  return {
+    canPrompt: supportsUrl,
+
+    async prompt({ message, url, elicitationId }): Promise<PromptOutcome> {
+      if (!supportsUrl()) return "unsupported";
+      try {
+        const result = await server.server.elicitInput({ mode: "url", message, url, elicitationId });
+        return result.action as PromptOutcome;
+      } catch {
+        // A client that advertises the capability but rejects the request
+        // should not break the tool call; fall back to reporting the URL.
+        return "unsupported";
+      }
+    },
+
+    async complete(elicitationId: string): Promise<void> {
+      if (!supportsUrl()) return;
+      try {
+        await server.server.createElicitationCompletionNotifier(elicitationId)();
+      } catch {
+        // Dismissing the prompt is best effort.
+      }
+    },
+  };
 }

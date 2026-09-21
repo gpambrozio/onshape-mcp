@@ -31,5 +31,7 @@ export interface ToolDef {
   description: string;
   inputSchema: ZodRawShape;
   annotations?: ToolAnnotations;
+  /** False for the sign-in tools, which must run without credentials. */
+  requiresAuth?: boolean;
   handler: (args: Record<string, any>, ctx: ToolContext) => Promise<ToolResult>;
 }
