@@ -93,7 +93,7 @@ export const authTools: ToolDef[] = ([
     title: "Store an Onshape API key pair",
     description:
       "Store an Onshape access key and secret key directly, without a browser. Use when the user already has a key " +
-      "pair from https://dev.onshape.com/keys. The pair is verified against Onshape before it is saved.",
+      "pair from https://cad.onshape.com/user/developer/apiKeys. The pair is verified against Onshape before it is saved.",
     inputSchema: {
       access_key: z.string().min(1).describe("Onshape access key."),
       secret_key: z.string().min(1).describe("Onshape secret key."),
@@ -213,7 +213,12 @@ async function report(
     open_this_url: flow.url,
     expires_at: new Date(flow.expiresAt).toISOString(),
     next_step: "Ask the user to finish in the browser, then call onshape_login_status.",
-    ...(method === "api_key" && baseUrl ? { onshape_key_page: keyPageFor(baseUrl) } : {}),
+    ...(method === "api_key" && baseUrl
+      ? {
+          onshape_key_page: keyPageFor(baseUrl),
+          key_permissions: "The key needs Read, Write and Delete ticked for every tool here to work.",
+        }
+      : {}),
     ...(flow.redirectUri ? { registered_redirect_url: flow.redirectUri } : {}),
   });
 }

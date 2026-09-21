@@ -39,6 +39,27 @@ test("api key flow accepts a pasted pair and completes", async () => {
   assert.equal(flow.message, "saved");
 });
 
+test("the form links to the key page, and follows a retry onto another stack", async (t) => {
+  const flow = await startApiKeyFlow({ accept: async () => { throw new Error("HTTP 401"); } });
+  t.after(() => flow.cancel());
+
+  const form = await (await fetch(flow.url)).text();
+  assert.match(form, /https:\/\/cad\.onshape\.com\/user\/developer\/apiKeys/);
+
+  const retry = await fetch(new URL("/submit", flow.url), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      nonce: nonceOf(flow.url),
+      access_key: "AK",
+      secret_key: "SK",
+      base_url: "https://acme.onshape.com",
+    }).toString(),
+  });
+  assert.equal(retry.status, 400);
+  assert.match(await retry.text(), /https:\/\/acme\.onshape\.com\/user\/developer\/apiKeys/);
+});
+
 test("a rejected credential keeps the flow open for a retry", async () => {
   let attempts = 0;
   const flow = await startApiKeyFlow({
@@ -102,7 +123,7 @@ test("a request that did not address loopback is refused", async (t) => {
 });
 
 test("key page and redirect URI follow the account host", () => {
-  assert.equal(keyPageFor("https://cad.onshape.com"), "https://dev.onshape.com/keys");
-  assert.equal(keyPageFor("https://acme.onshape.com"), "https://acme.onshape.com/appstore/dev-portal/keys");
+  assert.equal(keyPageFor("https://cad.onshape.com"), "https://cad.onshape.com/user/developer/apiKeys");
+  assert.equal(keyPageFor("https://acme.onshape.com"), "https://acme.onshape.com/user/developer/apiKeys");
   assert.equal(redirectUriFor(8471), "http://localhost:8471/oauth/callback");
 });

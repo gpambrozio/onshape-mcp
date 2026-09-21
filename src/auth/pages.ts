@@ -24,6 +24,10 @@ const STYLE = `
   .error { background: #fdecec; border: 1px solid #f5c2c2; color: #a02020; padding: 10px 12px;
            border-radius: 7px; font-size: 13px; margin-bottom: 4px; }
   .ok { font-size: 44px; text-align: center; margin-bottom: 8px; }
+  .go { display: block; margin: 0 0 18px; padding: 10px; border-radius: 7px; background: #0b6bcb;
+        color: #fff; font-size: 15px; font-weight: 600; text-align: center; text-decoration: none; }
+  .go:hover { background: #0a5cb0; }
+  .hint { font-size: 12px; color: #78828f; margin: 5px 0 0; }
 `;
 
 function shell(title: string, inner: string): string {
@@ -39,10 +43,13 @@ export function apiKeyForm(opts: { nonce: string; baseUrl: string; keysUrl: stri
     `<h1>Connect Onshape</h1>
      <p>This page is served locally by the Onshape MCP server. Your keys go straight into your
         OS keychain and are never sent anywhere else.</p>
+     <a class="go" id="key_page" href="${escapeHtml(opts.keysUrl)}" target="_blank" rel="noreferrer">
+       Create an API key on Onshape &nearr;</a>
      <ol>
-       <li>Open <a href="${escapeHtml(opts.keysUrl)}" target="_blank" rel="noreferrer">the Onshape developer key page</a>.</li>
-       <li>Create an API key pair with read and write access.</li>
-       <li>Paste both halves below before closing the Onshape tab &mdash; the secret is shown only once.</li>
+       <li>Tick <strong>Read</strong>, <strong>Write</strong> and <strong>Delete</strong> so every tool
+           here works, then create the key.</li>
+       <li>Copy both halves before closing the Onshape tab &mdash; the secret is shown only once.</li>
+       <li>Paste them below and save.</li>
      </ol>
      ${error}
      <form method="post" action="/submit">
@@ -53,10 +60,26 @@ export function apiKeyForm(opts: { nonce: string; baseUrl: string; keysUrl: stri
        <input id="secret_key" name="secret_key" autocomplete="off" spellcheck="false" required>
        <label for="base_url">Onshape URL</label>
        <input id="base_url" name="base_url" value="${escapeHtml(opts.baseUrl)}" spellcheck="false">
+       <p class="hint">On an enterprise stack, set this first &mdash; the key link above follows it.</p>
        <button type="submit">Verify and save</button>
-     </form>`,
+     </form>
+     <script>${KEY_LINK_SCRIPT}</script>`,
   );
 }
+
+/** Enterprise accounts keep their keys on their own host, and the user may only
+ *  realise that once they are looking at this page. */
+const KEY_LINK_SCRIPT = `
+  var field = document.getElementById("base_url");
+  var link = document.getElementById("key_page");
+  field.addEventListener("input", function () {
+    try {
+      link.href = "https://" + new URL(field.value.trim()).hostname + "/user/developer/apiKeys";
+    } catch (e) {
+      // Half-typed URL: keep the last link that parsed.
+    }
+  });
+`;
 
 export function successPage(message: string): string {
   return shell(
