@@ -6,8 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-21
+
+### Fixed
+
+- The sign-in page linked to the wrong place for a new API key. Keys live under
+  account settings at `/user/developer/apiKeys` on the account's own host, not
+  at `dev.onshape.com/keys` or `/appstore/dev-portal/keys`.
+
 ### Changed
 
+- The sign-in page leads with a button to the Onshape key page, names the Read,
+  Write and Delete permissions the tools need, and retargets the link at the
+  Onshape URL you type, so enterprise users reach their own key page.
 - Releases publish to npm through trusted publishing (OIDC) rather than a stored
   npm token; provenance is attached automatically.
 
@@ -39,5 +50,6 @@ its API layer from:
 - The variable-table endpoint answers 404 on some accounts, so variables are
   read and written through `assignVariable` features when it does.
 
-[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gpambrozio/onshape-mcp/releases/tag/v0.1.0

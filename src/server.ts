@@ -6,7 +6,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthPrompter, PromptOutcome } from "./auth/prompt.js";
 import { allTools, ToolContext } from "./tools/index.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 /** Shown to the model once, so individual tool descriptions can stay short. */
 const INSTRUCTIONS = `Drive Onshape CAD through its REST API.
