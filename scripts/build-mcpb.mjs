@@ -98,7 +98,9 @@ writeFileSync(
   )}\n`,
 );
 
-execFileSync("npx", ["--yes", "@anthropic-ai/mcpb", "pack", build, join(root, `onshape-mcp-${pkg.version}.mcpb`)], {
+// npx is a .cmd shim on Windows, which execFileSync cannot launch directly.
+const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+execFileSync(npx, ["--yes", "@anthropic-ai/mcpb", "pack", build, join(root, `onshape-mcp-${pkg.version}.mcpb`)], {
   stdio: "inherit",
 });
 console.log(`\nBundle written to onshape-mcp-${pkg.version}.mcpb`);
