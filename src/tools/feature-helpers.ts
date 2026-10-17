@@ -5,7 +5,8 @@
 import { isRecord } from "../api/util.js";
 import type { Feature } from "../builders/params.js";
 import type { ToolContext } from "./context.js";
-import { fail, ok, requireTarget, toolError } from "./shapes.js";
+import { ok, requireTarget, toolError } from "./shapes.js";
+import { featureWriteResult, type FeatureWriteSummary } from "./feature-results.js";
 import type { ToolResult } from "./types.js";
 
 export function featureIdOf(response: unknown): string | null {
@@ -28,17 +29,21 @@ export async function addPartStudioFeature(
     const api = ctx.api();
     const response = await api.partStudios.addFeature(target.doc, target.ws, target.elem, feature);
     const featureId = featureIdOf(response);
-    const result: Record<string, unknown> = { featureId, response };
+    const summary: FeatureWriteSummary = { featureId, creationApplied: true };
 
+    if (args.validate !== false && !featureId) {
+      return featureWriteResult(ctx, summary, response, "Cannot verify regeneration: add-feature response has no featureId.");
+    }
     if (args.validate !== false && featureId) {
       try {
-        result.validation = await api.partStudios.validateFeature(target.doc, target.ws, target.elem, featureId);
+        summary.validation = await api.partStudios.validateFeature(target.doc, target.ws, target.elem, featureId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return fail(message, { featureId, response });
+        return featureWriteResult(ctx, summary, response, message);
       }
     }
-    return ok(ctx, result);
+    if (args.validate === false) summary.validationSkipped = true;
+    return featureWriteResult(ctx, summary, response);
   } catch (error) {
     return toolError(error);
   }

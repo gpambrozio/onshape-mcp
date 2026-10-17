@@ -105,6 +105,14 @@ Worth knowing:
 - **Feature tools validate by default.** Onshape answers `200` for a feature
   that fails to regenerate, so each tool re-reads the feature state and fails
   loudly instead. Pass `validate: false` to skip it.
+- **Part Studio writes acknowledge applied changes.** Creation replies include
+  `creationApplied: true`; updates include `updateApplied: true` after the POST
+  completes. Validation errors do not undo the change: inspect the model before
+  retrying. A failed POST does not establish whether the server applied a change.
+  Large replies retain the feature ID and validation outcome inline, with the
+  full response in `saved_to`. If that file cannot be saved, `responseStorageError`
+  reports the storage problem without changing the write/validation outcome.
+  `validate: false` on creation is reported as `validationSkipped: true`.
 - **Renders come back as images.** `shaded_view` and `get_thumbnail` return the
   PNG inline as well as writing it, so the model can see the part.
 - **Big reads spill to disk.** Anything over `ONSHAPE_MCP_MAX_RESPONSE_BYTES`

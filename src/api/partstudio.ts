@@ -9,7 +9,7 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 
 export interface FeatureValidation {
   featureId: string;
-  featureStatus: string | null;
+  featureStatus: string;
 }
 
 export class PartStudioManager {
@@ -132,12 +132,22 @@ export class PartStudioManager {
     workspaceId: string,
     elementId: string,
     featureId: string,
+    checkOtherFeatures = false,
   ): Promise<FeatureValidation> {
     const features = await this.getFeatures(documentId, workspaceId, elementId);
     const states = isRecord(features) && isRecord(features.featureStates) ? features.featureStates : {};
     const state = isRecord(states[featureId]) ? states[featureId] : {};
     const status = typeof state.featureStatus === "string" ? state.featureStatus : null;
+    if (!status) throw new Error(`Cannot verify regeneration: feature ${featureId} has no featureStatus.`);
     if (status === "ERROR") throw new Error(`Feature ${featureId} regenerated with status ERROR.`);
+    // Editing an earlier sketch can break a later solid feature while the
+    // sketch itself remains OK. Inspect the same snapshot for those failures.
+    if (checkOtherFeatures) {
+      const failed = Object.entries(states)
+        .filter(([, value]) => isRecord(value) && value.featureStatus === "ERROR")
+        .map(([id]) => id);
+      if (failed.length) throw new Error(`Part Studio contains regeneration errors: ${failed.join(", ")}.`);
+    }
     return { featureId, featureStatus: status };
   }
 

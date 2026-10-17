@@ -5,6 +5,7 @@ import { z } from "zod";
 import { decodeFsValue, featurescriptMessages } from "../api/fsvalue.js";
 import { isRecord } from "../api/util.js";
 import { addPartStudioFeature, run } from "./feature-helpers.js";
+import { featureWriteResult, type FeatureWriteSummary } from "./feature-results.js";
 import { docWsShape, fail, ok, requireDocWs, requireTarget, targetShape, toolError, validateShape } from "./shapes.js";
 import type { ToolDef } from "./types.js";
 
@@ -134,7 +135,8 @@ export const partStudioTools: ToolDef[] = [
     title: "Add a raw feature",
     description:
       "Post a hand-written BTM feature payload to a Part Studio. The escape hatch for feature types this server has " +
-      "no dedicated tool for — read onshape_get_feature_specs first.",
+      "no dedicated tool for — read onshape_get_feature_specs first. " +
+      "An acknowledged creation returns creationApplied: true even if validation fails; inspect it before retrying.",
     inputSchema: {
       ...targetShape,
       feature: z.record(z.string(), z.any()).describe("The feature JSON, usually a BTFeatureDefinitionCall-1406 envelope."),
@@ -145,15 +147,32 @@ export const partStudioTools: ToolDef[] = [
   {
     name: "onshape_update_feature",
     title: "Update a feature",
-    description: "Replace an existing feature's payload, e.g. to change a dimension. Post the whole feature JSON.",
+    description:
+      "Replace an existing feature's payload, e.g. to change a dimension. Post the whole feature JSON. " +
+      "Re-read regeneration state afterwards, including errors in other features. A validation failure does not undo the edit. " +
+      "The feature id, updateApplied flag and validation outcome remain inline even when the API response is saved to disk.",
     inputSchema: {
       ...targetShape,
       feature_id: z.string().min(1).describe("Id of the feature to replace."),
       feature: z.record(z.string(), z.any()).describe("The full replacement feature JSON."),
     },
-    handler: (args, ctx) => {
-      const t = requireTarget(args);
-      return run(ctx, () => ctx.api().partStudios.updateFeature(t.doc, t.ws, t.elem, args.feature_id, args.feature));
+    handler: async (args, ctx) => {
+      try {
+        const t = requireTarget(args);
+        const api = ctx.api().partStudios;
+        const response = await api.updateFeature(t.doc, t.ws, t.elem, args.feature_id, args.feature);
+        const summary: FeatureWriteSummary = { featureId: args.feature_id, updateApplied: true };
+        try {
+          summary.validation = await api.validateFeature(t.doc, t.ws, t.elem, args.feature_id, true);
+        } catch (error) {
+          // The POST has already completed. Make that explicit so a caller does
+          // not mistake a verification failure for an edit that never happened.
+          return featureWriteResult(ctx, summary, response, error instanceof Error ? error.message : String(error));
+        }
+        return featureWriteResult(ctx, summary, response);
+      } catch (error) {
+        return toolError(error);
+      }
     },
   },
   {
