@@ -30,6 +30,9 @@ export async function addPartStudioFeature(
     const featureId = featureIdOf(response);
     const result: Record<string, unknown> = { featureId, response };
 
+    if (args.validate !== false && !featureId) {
+      return fail("Cannot verify regeneration: add-feature response has no featureId.", { response });
+    }
     if (args.validate !== false && featureId) {
       try {
         result.validation = await api.partStudios.validateFeature(target.doc, target.ws, target.elem, featureId);

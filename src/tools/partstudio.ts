@@ -145,15 +145,32 @@ export const partStudioTools: ToolDef[] = [
   {
     name: "onshape_update_feature",
     title: "Update a feature",
-    description: "Replace an existing feature's payload, e.g. to change a dimension. Post the whole feature JSON.",
+    description:
+      "Replace an existing feature's payload, e.g. to change a dimension. Post the whole feature JSON. " +
+      "Re-read regeneration state afterwards, including errors in other features. A validation failure does not undo the edit.",
     inputSchema: {
       ...targetShape,
       feature_id: z.string().min(1).describe("Id of the feature to replace."),
       feature: z.record(z.string(), z.any()).describe("The full replacement feature JSON."),
     },
-    handler: (args, ctx) => {
-      const t = requireTarget(args);
-      return run(ctx, () => ctx.api().partStudios.updateFeature(t.doc, t.ws, t.elem, args.feature_id, args.feature));
+    handler: async (args, ctx) => {
+      try {
+        const t = requireTarget(args);
+        const api = ctx.api().partStudios;
+        const response = await api.updateFeature(t.doc, t.ws, t.elem, args.feature_id, args.feature);
+        try {
+          const validation = await api.validateFeature(t.doc, t.ws, t.elem, args.feature_id, true);
+          return ok(ctx, { response, validation });
+        } catch (error) {
+          // The POST has already completed. Make that explicit so a caller does
+          // not mistake a verification failure for an edit that never happened.
+          return fail(error instanceof Error ? error.message : String(error), {
+            featureId: args.feature_id, updateApplied: true, response,
+          });
+        }
+      } catch (error) {
+        return toolError(error);
+      }
     },
   },
   {
