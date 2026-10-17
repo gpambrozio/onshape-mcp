@@ -53,4 +53,7 @@ test("a missing id after add cannot silently skip validation", async () => {
   const f = fixture({}, {});
   const result = await addPartStudioFeature(f.ctx, args, () => ({}) as never);
   assert.equal(result.isError, true);
+  const payload = JSON.parse(String(result.content[0].text));
+  assert.equal(payload.detail.creationApplied, true);
+  assert.equal(payload.detail.featureId, null);
 });
