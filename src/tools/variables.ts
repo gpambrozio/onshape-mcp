@@ -24,7 +24,9 @@ export const variableTools: ToolDef[] = [
     description:
       "Create or update a variable. Feature tools can then reference it by name (depth_variable, radius_variable, " +
       "...) so a dimension lives in one place. Uses the variable table where the account supports it and falls back " +
-      "to an assignVariable feature otherwise; result.route says which was used.",
+      "to an assignVariable feature otherwise; result.route says which was used. On the feature route an existing " +
+      "variable of the same name is rewritten in place, so features built after it pick up the new value " +
+      "(result.action is updated or created).",
     inputSchema: {
       ...targetShape,
       name: z.string().min(1).describe("Variable name, without the leading #."),

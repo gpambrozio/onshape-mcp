@@ -66,9 +66,20 @@ if (WRITE) {
       const sketch = await call("onshape_sketch_rectangle", { doc, ws, elem, corner1: [0, 0], corner2: [2, 1] });
       const extrude = await call("onshape_extrude", { doc, ws, elem, sketch: sketch?.featureId, depth: 0.5 });
       await call("onshape_fillet", { doc, ws, elem, feature: extrude?.featureId, radius: 0.1 });
+      const circle = await call("onshape_sketch_circle", { doc, ws, elem, center: [1, 0.5], radius: 0.1 });
+      await call("onshape_hole", { doc, ws, elem, sketch: circle?.featureId, end_type: "THROUGH_ALL" });
+      // A second body 1 in clear of the first, extruded about its sketch plane.
+      const block = await call("onshape_sketch_rectangle", { doc, ws, elem, corner1: [3, 0], corner2: [4, 1] });
+      const blockSketch = block?.featureId;
+      const blockExtrude = await call("onshape_extrude", { doc, ws, elem, sketch: blockSketch, depth: 0.5, end_type: "SYMMETRIC" });
+      const sides = { a: { feature: extrude?.featureId }, b: { feature: blockExtrude?.featureId } };
+      await call("onshape_clearance", { doc, ws, elem, ...sides });
       await call("onshape_measure", { doc, ws, elem });
       await call("onshape_get_edges", { doc, ws, elem });
       await call("onshape_set_variable", { doc, ws, elem, name: "wall", expression: "0.125 in" });
+      // On accounts without the variable table this must rewrite the first
+      // Variable feature (result.action "updated"), not append a second.
+      await call("onshape_set_variable", { doc, ws, elem, name: "wall", expression: "0.25 in" });
       await call("onshape_get_variables", { doc, ws, elem });
       await call("onshape_shaded_view", { doc, ws, elem, out: "/tmp/onshape-mcp-smoke.png", return_image: false });
       await call("onshape_export_stl", { doc, ws, elem, out: "/tmp/onshape-mcp-smoke.stl" });

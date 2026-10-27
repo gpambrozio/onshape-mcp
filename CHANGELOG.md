@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `onshape_clearance`: the minimum distance between two solid bodies, each named
+  by part id or by the feature that created it, in inches and millimetres with
+  the closest points. Zero means the bodies touch or overlap, so it doubles as
+  an interference check.
+- `onshape_extrude` and `onshape_hole` take `end_type` (`BLIND`, `SYMMETRIC` or
+  `THROUGH_ALL`) and `opposite`. A through-all cut needs no depth, and a
+  symmetric extrude spends its depth half on each side of the sketch plane.
+
+### Changed
+
+- **`onshape_export_stl` now writes millimetres by default**, not inches. STL
+  carries no unit and slicers read it as millimetres, so the old default printed
+  parts 25.4 times too small. Pass `units: "inch"` for the previous behaviour.
+  The result now states the unit used.
+
+### Fixed
+
+- `onshape_set_variable` on accounts without the variable table appended a new
+  Variable feature every time, so setting an existing name changed nothing built
+  before the new feature, and said nothing about it. It now rewrites the existing
+  feature in place, keeping its description unless given a new one, and reports
+  `action: "updated"` or `"created"`.
+- `construction: true` was ignored on arcs in `onshape_create_sketch`.
+
 ## [0.1.2] - 2026-09-21
 
 ### Fixed

@@ -2,7 +2,7 @@
  *
  * Handlers take already-validated arguments as a plain record: the MCP SDK
  * validates each call against the tool's zod schema before we see it, and
- * threading 87 inferred argument types through the registry buys nothing. */
+ * threading 88 inferred argument types through the registry buys nothing. */
 
 import type { ZodRawShape } from "zod";
 

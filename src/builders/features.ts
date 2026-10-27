@@ -20,20 +20,44 @@ import {
 /** NEW makes a body, ADD/REMOVE/INTERSECT combine with existing ones. */
 export type OperationType = "NEW" | "ADD" | "REMOVE" | "INTERSECT";
 
+/** Where an extrude stops. BLIND goes `depth` along the sketch normal,
+ *  SYMMETRIC goes `depth` in total split evenly about the sketch plane, and
+ *  THROUGH_ALL goes past every body in the Part Studio. */
+export type ExtrudeEnd = "BLIND" | "SYMMETRIC" | "THROUGH_ALL";
+
 export function buildExtrude(input: {
   name: string;
   sketchFeatureId: string;
-  depth: number;
+  depth?: number;
   operationType: string;
   depthVariable?: string;
+  end?: ExtrudeEnd;
+  /** Extrude against the sketch normal rather than along it. */
+  opposite?: boolean;
 }): Feature {
-  return featureCall("extrude", input.name, [
+  const end = input.end ?? "BLIND";
+  if (end === "SYMMETRIC" && input.opposite) {
+    throw new Error("A symmetric extrude grows both ways; it has no opposite direction.");
+  }
+  const parameters = [
     pSketchRegion("entities", input.sketchFeatureId),
     pEnum("operationType", "NewBodyOperationType", input.operationType),
-    pQuantity("depth", input.depth, "in", { variable: input.depthVariable }),
-    pBool("oppositeDirection", false),
-    pBool("defaultScope", true),
-  ]);
+  ];
+  // A blind extrude leaves endBound at its BLIND default, so the payload stays
+  // exactly the one proven against Onshape before the other end types existed.
+  if (end === "THROUGH_ALL") {
+    parameters.push(pEnum("endBound", "BoundingType", "THROUGH_ALL"));
+  } else {
+    if (input.depth === undefined && !input.depthVariable) {
+      throw new Error(`A ${end.toLowerCase()} extrude needs a depth or a depth variable.`);
+    }
+    parameters.push(pQuantity("depth", input.depth ?? 0, "in", { variable: input.depthVariable }));
+  }
+  // Onshape's extrude takes symmetry as its own `symmetric` flag on a blind
+  // extrude; SYMMETRIC is not among the documented BoundingType values.
+  if (end === "SYMMETRIC") parameters.push(pBool("symmetric", true));
+  parameters.push(pBool("oppositeDirection", input.opposite ?? false), pBool("defaultScope", true));
+  return featureCall("extrude", input.name, parameters);
 }
 
 /** Thicken is posted as a bare BTMFeature-134 — the definition-call envelope is

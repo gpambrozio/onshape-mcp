@@ -55,6 +55,23 @@ test("degenerate sketch input is rejected before it reaches Onshape", () => {
   );
 });
 
+test("construction is honoured on every free-form entity that takes it", () => {
+  const sketch = buildSketchFromEntities({
+    name: "S",
+    plane: "Front",
+    entities: [
+      { type: "arc", center: [0, 0], radius: 1, startAngle: 0, endAngle: 90, construction: true },
+      { type: "arc", center: [0, 0], radius: 1, startAngle: 90, endAngle: 180 },
+      { type: "line", start: [0, 0], end: [1, 0], construction: true },
+      { type: "circle", center: [0, 0], radius: 0.5, construction: true },
+    ],
+  }) as any;
+  assert.deepEqual(
+    sketch.feature.entities.map((entity: any) => entity.isConstruction),
+    [true, false, true, true],
+  );
+});
+
 test("extrude carries the sketch region, operation and depth expression", () => {
   const extrude = buildExtrude({ name: "E", sketchFeatureId: "FID", depth: 0.25, operationType: "REMOVE" }) as any;
   assert.equal(extrude.btType, "BTFeatureDefinitionCall-1406");
@@ -62,6 +79,43 @@ test("extrude carries the sketch region, operation and depth expression", () => 
   assert.equal(parameter(extrude, "entities").queries[0].featureId, "FID");
   assert.equal(parameter(extrude, "operationType").value, "REMOVE");
   assert.equal(parameter(extrude, "depth").expression, "0.25 in");
+});
+
+test("a blind extrude keeps the payload proven against Onshape", () => {
+  const extrude = buildExtrude({ name: "E", sketchFeatureId: "FID", depth: 0.25, operationType: "NEW" }) as any;
+  assert.deepEqual(
+    parametersOf(extrude).map((param) => param.parameterId),
+    ["entities", "operationType", "depth", "oppositeDirection", "defaultScope"],
+  );
+  assert.equal(parameter(extrude, "oppositeDirection").value, false);
+});
+
+test("an extrude can go the opposite way, symmetrically, or through all", () => {
+  const opposite = buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "REMOVE", opposite: true }) as any;
+  assert.equal(parameter(opposite, "oppositeDirection").value, true);
+
+  const symmetric = buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "NEW", end: "SYMMETRIC" }) as any;
+  assert.equal(parameter(symmetric, "symmetric").value, true);
+  assert.equal(parameter(symmetric, "depth").expression, "1 in");
+  assert.equal(parametersOf(symmetric).some((param) => param.parameterId === "endBound"), false);
+
+  // Through-all needs no depth at all.
+  const through = buildExtrude({ name: "H", sketchFeatureId: "F", operationType: "REMOVE", end: "THROUGH_ALL", opposite: true }) as any;
+  assert.equal(parameter(through, "endBound").enumName, "BoundingType");
+  assert.equal(parameter(through, "endBound").value, "THROUGH_ALL");
+  assert.equal(parameter(through, "oppositeDirection").value, true);
+  assert.equal(parametersOf(through).some((param) => param.parameterId === "depth"), false);
+});
+
+test("extrude options that cannot work are rejected before they reach Onshape", () => {
+  assert.throws(
+    () => buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "NEW", end: "SYMMETRIC", opposite: true }),
+    /no opposite direction/,
+  );
+  assert.throws(() => buildExtrude({ name: "E", sketchFeatureId: "F", operationType: "NEW" }), /needs a depth/);
+  // A variable stands in for the depth.
+  const variable = buildExtrude({ name: "E", sketchFeatureId: "F", operationType: "NEW", end: "SYMMETRIC", depthVariable: "w" }) as any;
+  assert.equal(parameter(variable, "depth").expression, "#w");
 });
 
 test("a variable reference replaces the literal dimension", () => {

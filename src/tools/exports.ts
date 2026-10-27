@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 
-import type { WrittenFile } from "../api/export.js";
+import { DEFAULT_STL_UNITS, type WrittenFile } from "../api/export.js";
 import type { ToolContext } from "./context.js";
 import { ok, requireTarget, targetShape, toolError } from "./shapes.js";
 import type { ToolDef, ToolResult } from "./types.js";
@@ -23,26 +23,30 @@ export const exportTools: ToolDef[] = [
   {
     name: "onshape_export_stl",
     title: "Export STL",
-    description: "Export the Part Studio as STL, for 3D printing. Measure the model before exporting it.",
+    description:
+      "Export the Part Studio as STL, for 3D printing. The file is in millimetres by default, which is what " +
+      "slicers assume; STL carries no unit, so only change `units` if the consumer expects otherwise. Measure the " +
+      "model before exporting it.",
     inputSchema: {
       ...targetShape,
       out: z.string().optional().describe("Output file path (default onshape-<timestamp>.stl in the output directory)."),
       ascii: z.boolean().optional().describe("Write ASCII STL instead of binary."),
       resolution: z.enum(["coarse", "medium", "fine"]).optional().describe("Tessellation quality (default medium)."),
-      units: z.enum(["inch", "foot", "meter", "centimeter", "millimeter"]).optional().describe("STL units (default inch)."),
+      units: z.enum(["inch", "foot", "meter", "centimeter", "millimeter"]).optional().describe("STL units (default millimeter)."),
       configuration: configurationShape,
     },
     handler: async (args, ctx) => {
       try {
         const t = requireTarget(args);
         const out = outputPath(ctx, args.out, "stl");
+        const units = args.units ?? DEFAULT_STL_UNITS;
         const written = await ctx.api().exports.exportStl(t.doc, t.ws, t.elem, out, {
           binary: !args.ascii,
           resolution: args.resolution ?? "medium",
-          units: args.units,
+          units,
           configuration: args.configuration,
         });
-        return ok(ctx, describe(written));
+        return ok(ctx, { ...describe(written), units });
       } catch (error) {
         return toolError(error);
       }

@@ -1,6 +1,6 @@
 # Onshape MCP server
 
-Drive [Onshape](https://www.onshape.com) CAD from an AI assistant. 87 tools for
+Drive [Onshape](https://www.onshape.com) CAD from an AI assistant. 88 tools for
 documents, part studios, sketching, solid features, assemblies, drawings,
 measurement and export — and no setup beyond installing it: the first tool call
 that needs Onshape opens a browser and asks you to connect.
@@ -84,7 +84,7 @@ An existing [`onshape-cli`](https://github.com/am-will/onshape-cli) credential a
 | --- | --- |
 | Sign-in | `login`, `login_status`, `set_api_key`, `auth_status`, `logout` |
 | Documents | `list_documents`, `search_documents`, `get_document`, `get_document_summary`, `create_document`, `update_document`, `delete_document`, `get_workspaces`, `get_elements`, `find_part_studios`, `list_versions`, `create_version`, `delete_element` |
-| Part studios | `create_part_studio`, `get_features`, `get_feature_specs`, `get_sketch_info`, `get_body_details`, `get_parts`, `mass_properties`, `measure`, `validate_part_studio`, `add_feature`, `update_feature`, `delete_feature`, `rollback`, `eval_featurescript` |
+| Part studios | `create_part_studio`, `get_features`, `get_feature_specs`, `get_sketch_info`, `get_body_details`, `get_parts`, `mass_properties`, `measure`, `clearance`, `validate_part_studio`, `add_feature`, `update_feature`, `delete_feature`, `rollback`, `eval_featurescript` |
 | Sketching | `sketch_rectangle`, `sketch_circle`, `sketch_line`, `sketch_circle_axis`, `create_sketch`, `sketch_candy_cane_path` |
 | Solids | `extrude`, `hole`, `thicken`, `revolve`, `sweep`, `fillet`, `chamfer`, `shell`, `draft`, `boolean`, `boolean_union`, `mirror`, `linear_pattern`, `circular_pattern`, `offset_plane` |
 | Geometry | `get_edges`, `find_circular_edges`, `find_edges_by_feature` |
@@ -101,7 +101,8 @@ or `{"ok": false, "error": …, "detail": …}`.
 
 Worth knowing:
 
-- **Units are inches and degrees** throughout.
+- **Units are inches and degrees** throughout, except STL exports, which are
+  millimetres by default because that is what slicers assume.
 - **Feature tools validate by default.** Onshape answers `200` for a feature
   that fails to regenerate, so each tool re-reads the feature state and fails
   loudly instead. Pass `validate: false` to skip it.
@@ -146,7 +147,8 @@ These come from Onshape, not from this server:
   with Delete ticked.
 - **The variable-table endpoint 404s on some accounts.** `onshape_set_variable`
   and `onshape_get_variables` fall back to `assignVariable` features, which work
-  everywhere; `result.route` / `result.source` says which path was taken.
+  everywhere; `result.route` / `result.source` says which path was taken. Setting
+  a name that already has a Variable feature rewrites that feature in place.
 
 ## Development
 
