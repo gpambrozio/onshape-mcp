@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
 ### Added
 
 - `onshape_clearance`: the minimum distance between two solid bodies, each named
@@ -96,7 +98,8 @@ its API layer from:
 - The variable-table endpoint answers 404 on some accounts, so variables are
   read and written through `assignVariable` features when it does.
 
-[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gpambrozio/onshape-mcp/releases/tag/v0.1.0
