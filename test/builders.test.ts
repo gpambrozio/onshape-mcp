@@ -197,7 +197,14 @@ test("assignVariable writes the expression into the parameter for its type", () 
   assert.equal(parameter(length, "lengthValue").expression, "0.125 in");
   assert.equal(parameter(length, "description").value, "wall thickness");
 
+  // Regression: the feature name is a template, so "#wall = 0.125 in" showed
+  // as "? = 0.125 in" in the feature list. Onshape's own name, plus the hidden
+  // value parameter it displays, is what a Variable made in the UI carries.
+  assert.equal(length.feature.name, "###name = #value");
+  assert.equal(parameter(length, "value").expression, "0.125 in");
+
   const count = buildAssignVariable({ name: "turns", expression: "6" }) as any;
   assert.equal(parameter(count, "variableType").value, "NUMBER");
   assert.equal(parameter(count, "numberValue").expression, "6");
+  assert.equal(parameter(count, "value").expression, "6");
 });

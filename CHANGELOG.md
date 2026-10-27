@@ -30,6 +30,13 @@ All notable changes to this project are documented here. The format follows
   before the new feature, and said nothing about it. It now rewrites the existing
   feature in place, keeping its description unless given a new one, and reports
   `action: "updated"` or `"created"`.
+- Variables created by `onshape_set_variable`'s feature fallback showed as
+  `? = 1.5 mm` in the feature list. Onshape treats a feature name as a template
+  (`#param` shows a parameter), so the name `#gear_module = 1.5 mm` referred to
+  a parameter that does not exist. The feature now carries Onshape's own name,
+  `###name = #value`, and the hidden `value` parameter that name displays,
+  exactly as a Variable made in the UI does. Setting the variable again repairs
+  a feature created with the old name.
 - `construction: true` was ignored on arcs in `onshape_create_sketch`.
 - `onshape_find_circular_edges` returned `[]` on every part, and
   `onshape_get_edges` labelled arcs and circles as lines. Both read the radius

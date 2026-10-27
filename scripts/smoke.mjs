@@ -90,6 +90,15 @@ if (WRITE) {
       // Variable feature (result.action "updated"), not append a second.
       await call("onshape_set_variable", { doc, ws, elem, name: "wall", expression: "0.25 in" });
       await call("onshape_get_variables", { doc, ws, elem });
+      // The feature list renders a Variable's name from Onshape's template; a
+      // spelled-out "#wall = ..." name shows as "? = ...".
+      const tree = await call("onshape_get_features", { doc, ws, elem });
+      const wall = tree?.features?.find((feature) => feature.featureType === "assignVariable");
+      const valueParameter = wall?.parameters?.find((parameter) => parameter.parameterId === "value");
+      if (wall?.name !== "###name = #value" || valueParameter?.expression !== "0.25 in") {
+        failures += 1;
+        console.log(`✖ the wall Variable is named ${JSON.stringify(wall?.name)}, value ${JSON.stringify(valueParameter?.expression)}`);
+      }
       await call("onshape_shaded_view", { doc, ws, elem, out: "/tmp/onshape-mcp-smoke.png", return_image: false });
       await call("onshape_export_stl", { doc, ws, elem, out: "/tmp/onshape-mcp-smoke.stl" });
     } finally {

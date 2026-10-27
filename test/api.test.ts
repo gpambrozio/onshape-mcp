@@ -96,6 +96,8 @@ test("set_variable rewrites an existing Variable feature in place", async () => 
   );
   const feature = posts[0].body.feature;
   assert.equal(feature.featureId, "FWALL");
+  // The rewrite also repairs a feature named by the old "#wall = ..." form.
+  assert.equal(feature.name, "###name = #value");
   const parameter = (id: string) => feature.parameters.find((param: any) => param.parameterId === id);
   assert.equal(parameter("lengthValue").expression, "0.2 in");
   assert.equal(parameter("description").value, "wall thickness", "the existing description is kept");
