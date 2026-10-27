@@ -31,6 +31,11 @@ All notable changes to this project are documented here. The format follows
   feature in place, keeping its description unless given a new one, and reports
   `action: "updated"` or `"created"`.
 - `construction: true` was ignored on arcs in `onshape_create_sketch`.
+- `onshape_find_circular_edges` returned `[]` on every part, and
+  `onshape_get_edges` labelled arcs and circles as lines. Both read the radius
+  from the edge's `geometry`, but `/bodydetails` describes the curve (type,
+  radius, centre) under `curve`. Circular edges now also report their centre in
+  inches, which tells a hole rim from a fillet arc of the same radius.
 
 ## [0.1.2] - 2026-09-21
 

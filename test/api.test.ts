@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { HttpError, type OnshapeClient } from "../src/api/client.js";
+import { EdgeQuery } from "../src/api/edges.js";
 import { ExportManager } from "../src/api/export.js";
 import { PartStudioManager } from "../src/api/partstudio.js";
 import { VariableManager } from "../src/api/variables.js";
@@ -176,4 +177,54 @@ test("STL exports default to millimetres", async () => {
 
   await exports.exportStl("D", "W", "E", out, { units: "inch" });
   assert.equal(calls[1].params?.units, "inch");
+});
+
+/** One edge as /bodydetails returns it (trimmed from a live response): the
+ *  curve's type, radius and centre are under `curve`, in metres. */
+function bodyDetailsEdge(id: string, curve: Record<string, unknown>) {
+  const vector = (x: number, y: number, z: number) => ({ btType: "BTVector3d-389", x, y, z });
+  return {
+    btType: "BTExportModelEdge-1782",
+    id,
+    vertices: [],
+    geometry: {
+      btType: "BTExportModelArcEdgeGeometry-1257",
+      startPoint: vector(0.0279, 0, 0.0127),
+      endPoint: vector(0.0279, 0, 0.0127),
+      arcSweep: 2 * Math.PI,
+    },
+    curve: { ...curve, origin: vector(...(curve.origin as [number, number, number])) },
+  };
+}
+
+test("circular edges are found from the curve bodydetails describes", async () => {
+  // Regression: the radius was read from `geometry`, which never carries it,
+  // so find_circular_edges returned [] on a part with a hole and fillets.
+  const { client } = fakeClient(() => ({
+    bodies: [
+      {
+        id: "JHD",
+        edges: [
+          bodyDetailsEdge("JMB", { btType: "BTCircleDescription-1145", type: "CIRCLE", radius: 0.00254, origin: [0.0254, 0, 0.0127] }),
+          bodyDetailsEdge("JFL", { btType: "BTCircleDescription-1145", type: "CIRCLE", radius: 0.00508, origin: [0, 0, 0] }),
+          bodyDetailsEdge("JPB", { btType: "BTLineDescription-1559", type: "LINE", origin: [0.04826, -0.0127, 0] }),
+        ],
+      },
+    ],
+  }));
+  const edges = new EdgeQuery(client);
+
+  const listing = await edges.getEdges("D", "W", "E");
+  assert.deepEqual(
+    (listing.edges as Array<Record<string, unknown>>).map((edge) => edge.type),
+    ["circle", "circle", "line"],
+  );
+
+  const all = await edges.findCircularEdges("D", "W", "E");
+  assert.deepEqual(
+    all.map((edge: any) => edge.id),
+    ["JMB", "JFL"],
+  );
+  const holes = await edges.findCircularEdges("D", "W", "E", 0.1);
+  assert.deepEqual(holes, [{ id: "JMB", body: "JHD", type: "circle", radius: 0.1, center: [1, 0, 0.5] }]);
 });

@@ -68,6 +68,15 @@ if (WRITE) {
       await call("onshape_fillet", { doc, ws, elem, feature: extrude?.featureId, radius: 0.1 });
       const circle = await call("onshape_sketch_circle", { doc, ws, elem, center: [1, 0.5], radius: 0.1 });
       await call("onshape_hole", { doc, ws, elem, sketch: circle?.featureId, end_type: "THROUGH_ALL" });
+      // The hole's rim: radius 0.1 centred on sketch (1, 0.5), which the Front
+      // plane maps to world x = 1, z = 0.5. Fillet arcs share the radius, so
+      // the centre is what identifies it.
+      const rims = await call("onshape_find_circular_edges", { doc, ws, elem, radius: 0.1 });
+      const near = (a, b) => Math.abs(a - b) < 1e-4;
+      if (!rims?.some((edge) => near(edge.center?.[0], 1) && near(edge.center?.[2], 0.5))) {
+        failures += 1;
+        console.log("✖ onshape_find_circular_edges did not find the hole's rim");
+      }
       // A second body 1 in clear of the first, extruded about its sketch plane.
       const block = await call("onshape_sketch_rectangle", { doc, ws, elem, corner1: [3, 0], corner2: [4, 1] });
       const blockSketch = block?.featureId;
