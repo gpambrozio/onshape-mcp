@@ -19,12 +19,10 @@ export interface BodyRef {
   featureId?: string;
 }
 
-/** Ids passed alongside a FeatureScript call; the script reads each one as the
- *  query `queries.<key>`. */
-export interface FeatureScriptQuery {
-  key: string;
-  value: string[];
-}
+/** Deterministic ids passed alongside a FeatureScript call, by key; the
+ *  script reads each entry as the query `queries.<key>`. Onshape wants a map
+ *  here and rejects a list of key/value pairs with a 400. */
+export type FeatureScriptQueries = Record<string, string[]>;
 
 export class PartStudioManager {
   constructor(private readonly client: OnshapeClient) {}
@@ -104,11 +102,11 @@ export class PartStudioManager {
     workspaceId: string,
     elementId: string,
     script: string,
-    queries?: FeatureScriptQuery[],
+    queries?: FeatureScriptQueries,
   ): Promise<unknown> {
     return this.client.post(`/api/v6/partstudios/d/${documentId}/w/${workspaceId}/e/${elementId}/featurescript`, {
       script,
-      ...(queries?.length ? { queries } : {}),
+      ...(queries && Object.keys(queries).length ? { queries } : {}),
     });
   }
 
@@ -123,16 +121,18 @@ export class PartStudioManager {
   ): Promise<Record<string, unknown>> {
     const sideA = bodyQuery("a", a);
     const sideB = bodyQuery("b", b);
+    // Map keys are quoted: FeatureScript rejects a bare key that shares its
+    // name with a variable in scope.
     const script =
       "function(context is Context, queries){" +
-      ` var a = ${sideA.expression}; var b = ${sideB.expression};` +
-      ' if (size(evaluateQuery(context, a)) == 0) { return { missing: "a" }; }' +
-      ' if (size(evaluateQuery(context, b)) == 0) { return { missing: "b" }; }' +
-      " var r = evDistance(context, { side0: a, side1: b });" +
+      ` var sideA = ${sideA.expression}; var sideB = ${sideB.expression};` +
+      ' if (size(evaluateQuery(context, sideA)) == 0) { return { "missing": "a" }; }' +
+      ' if (size(evaluateQuery(context, sideB)) == 0) { return { "missing": "b" }; }' +
+      ' var r = evDistance(context, { "side0": sideA, "side1": sideB });' +
       " var p = r.sides[0].point; var q = r.sides[1].point;" +
-      " return { distance: r.distance/inch," +
-      "   a: [p[0]/inch, p[1]/inch, p[2]/inch], b: [q[0]/inch, q[1]/inch, q[2]/inch] }; }";
-    const queries = [sideA.query, sideB.query].filter((query): query is FeatureScriptQuery => query !== undefined);
+      ' return { "distance": r.distance/inch,' +
+      '   "a": [p[0]/inch, p[1]/inch, p[2]/inch], "b": [q[0]/inch, q[1]/inch, q[2]/inch] }; }';
+    const queries: FeatureScriptQueries = { ...sideA.query, ...sideB.query };
     const response = await this.evaluateFeatureScript(documentId, workspaceId, elementId, script, queries);
     if (!isRecord(response) || response.result === null || response.result === undefined) {
       throw new FeatureScriptError(featurescriptMessages(response));
@@ -237,12 +237,12 @@ export class PartStudioManager {
 /** The FeatureScript expression for one side of a body comparison. A part id
  *  travels in the request's `queries`, which Onshape resolves for the script;
  *  a feature id becomes a query for the solid bodies that feature created. */
-function bodyQuery(key: string, ref: BodyRef): { expression: string; query?: FeatureScriptQuery } {
+function bodyQuery(key: string, ref: BodyRef): { expression: string; query?: FeatureScriptQueries } {
   if (Boolean(ref.partId) === Boolean(ref.featureId)) {
     throw new Error(`Body ${key} needs exactly one of a part id or a feature id.`);
   }
   if (ref.partId) {
-    return { expression: `qBodyType(queries.${key}, BodyType.SOLID)`, query: { key, value: [ref.partId] } };
+    return { expression: `qBodyType(queries.${key}, BodyType.SOLID)`, query: { [key]: [ref.partId] } };
   }
   return {
     expression: `qBodyType(qCreatedBy(makeId(${JSON.stringify(ref.featureId)}), EntityType.BODY), BodyType.SOLID)`,

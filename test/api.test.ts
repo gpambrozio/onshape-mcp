@@ -136,10 +136,13 @@ test("clearance passes part ids as queries and reports the gap", async () => {
 
   const body = calls[0].body;
   assert.equal(calls[0].path, "/api/v6/partstudios/d/D/w/W/e/E/featurescript");
-  assert.deepEqual(body.queries, [{ key: "a", value: ["JHD"] }]);
-  assert.match(body.script, /var a = qBodyType\(queries\.a, BodyType\.SOLID\)/);
+  // A map from key to ids: Onshape answers 400 to a list of {key, value} pairs.
+  assert.deepEqual(body.queries, { a: ["JHD"] });
+  assert.match(body.script, /var sideA = qBodyType\(queries\.a, BodyType\.SOLID\)/);
   assert.match(body.script, /qCreatedBy\(makeId\("FServo"\), EntityType\.BODY\)/);
-  assert.match(body.script, /evDistance\(context, \{ side0: a, side1: b \}\)/);
+  assert.match(body.script, /evDistance\(context, \{ "side0": sideA, "side1": sideB \}\)/);
+  // Onshape rejected bare keys that shadow a variable ("Cannot use a as map key").
+  assert.doesNotMatch(body.script, /[{,]\s*(a|b|distance|missing):/);
 });
 
 test("clearance of zero means touching or overlapping", async () => {
