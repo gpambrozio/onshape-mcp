@@ -10,7 +10,9 @@ export const geometryTools: ToolDef[] = [
   {
     name: "onshape_get_edges",
     title: "List edges",
-    description: "Every edge of every solid body, with its deterministic id, owning body, type and radius (inches).",
+    description:
+      "Every edge of every solid body, with its deterministic id, owning body, type, and for circles and arcs the " +
+      "radius and centre (inches).",
     inputSchema: { ...targetShape },
     annotations: { readOnlyHint: true },
     handler: (args, ctx) => {
@@ -21,7 +23,9 @@ export const geometryTools: ToolDef[] = [
   {
     name: "onshape_find_circular_edges",
     title: "Find circular edges",
-    description: "Circular edges, optionally only those matching a radius — the usual way to pick hole rims to fillet.",
+    description:
+      "Circular edges (full circles and arcs), optionally only those matching a radius, with each one's centre in " +
+      "inches — the usual way to pick hole rims to fillet, or to check where the holes are.",
     inputSchema: {
       ...targetShape,
       radius: z.number().positive().optional().describe("Only return edges with this radius, in inches."),

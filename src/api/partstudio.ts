@@ -6,11 +6,23 @@ import { decodeFsValue, featurescriptMessages, FeatureScriptError } from "./fsva
 import { isRecord } from "./util.js";
 
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
 
 export interface FeatureValidation {
   featureId: string;
   featureStatus: string | null;
 }
+
+/** A body named by its part id, or by the feature that created it. */
+export interface BodyRef {
+  partId?: string;
+  featureId?: string;
+}
+
+/** Deterministic ids passed alongside a FeatureScript call, by key; the
+ *  script reads each entry as the query `queries.<key>`. Onshape wants a map
+ *  here and rejects a list of key/value pairs with a 400. */
+export type FeatureScriptQueries = Record<string, string[]>;
 
 export class PartStudioManager {
   constructor(private readonly client: OnshapeClient) {}
@@ -85,10 +97,64 @@ export class PartStudioManager {
     });
   }
 
-  async evaluateFeatureScript(documentId: string, workspaceId: string, elementId: string, script: string): Promise<unknown> {
+  async evaluateFeatureScript(
+    documentId: string,
+    workspaceId: string,
+    elementId: string,
+    script: string,
+    queries?: FeatureScriptQueries,
+  ): Promise<unknown> {
     return this.client.post(`/api/v6/partstudios/d/${documentId}/w/${workspaceId}/e/${elementId}/featurescript`, {
       script,
+      ...(queries && Object.keys(queries).length ? { queries } : {}),
     });
+  }
+
+  /** Minimum distance between two solid bodies — 0 when they touch or overlap,
+   *  which makes it the interference check as well as the clearance one. */
+  async clearance(
+    documentId: string,
+    workspaceId: string,
+    elementId: string,
+    a: BodyRef,
+    b: BodyRef,
+  ): Promise<Record<string, unknown>> {
+    const sideA = bodyQuery("a", a);
+    const sideB = bodyQuery("b", b);
+    // Map keys are quoted: FeatureScript rejects a bare key that shares its
+    // name with a variable in scope.
+    const script =
+      "function(context is Context, queries){" +
+      ` var sideA = ${sideA.expression}; var sideB = ${sideB.expression};` +
+      ' if (size(evaluateQuery(context, sideA)) == 0) { return { "missing": "a" }; }' +
+      ' if (size(evaluateQuery(context, sideB)) == 0) { return { "missing": "b" }; }' +
+      ' var r = evDistance(context, { "side0": sideA, "side1": sideB });' +
+      " var p = r.sides[0].point; var q = r.sides[1].point;" +
+      ' return { "distance": r.distance/inch,' +
+      '   "a": [p[0]/inch, p[1]/inch, p[2]/inch], "b": [q[0]/inch, q[1]/inch, q[2]/inch] }; }';
+    const queries: FeatureScriptQueries = { ...sideA.query, ...sideB.query };
+    const response = await this.evaluateFeatureScript(documentId, workspaceId, elementId, script, queries);
+    if (!isRecord(response) || response.result === null || response.result === undefined) {
+      throw new FeatureScriptError(featurescriptMessages(response));
+    }
+    const d = (decodeFsValue(response.result) as Record<string, any>) || {};
+    if (d.missing) {
+      const ref = d.missing === "a" ? a : b;
+      throw new Error(`Body ${d.missing} (${describeBodyRef(ref)}) matched no solid body in this Part Studio.`);
+    }
+    const distance = Number(d.distance);
+    if (!Number.isFinite(distance)) throw new Error(`Unexpected evDistance result: ${JSON.stringify(d)}`);
+    return {
+      distance_in: round6(distance),
+      distance_mm: round4(distance * 25.4),
+      // Exactly zero when the bodies touch or interpenetrate; evDistance cannot
+      // tell those apart.
+      clear: distance > 0,
+      closest_points_in: {
+        a: (d.a as number[]).map(round4),
+        b: (d.b as number[]).map(round4),
+      },
+    };
   }
 
   /** Bounding box in inches, volume and body count for every solid body. */
@@ -166,4 +232,23 @@ export class PartStudioManager {
       partIds: parts.map((part) => (isRecord(part) ? part.partId : undefined)).filter(Boolean),
     };
   }
+}
+
+/** The FeatureScript expression for one side of a body comparison. A part id
+ *  travels in the request's `queries`, which Onshape resolves for the script;
+ *  a feature id becomes a query for the solid bodies that feature created. */
+function bodyQuery(key: string, ref: BodyRef): { expression: string; query?: FeatureScriptQueries } {
+  if (Boolean(ref.partId) === Boolean(ref.featureId)) {
+    throw new Error(`Body ${key} needs exactly one of a part id or a feature id.`);
+  }
+  if (ref.partId) {
+    return { expression: `qBodyType(queries.${key}, BodyType.SOLID)`, query: { [key]: [ref.partId] } };
+  }
+  return {
+    expression: `qBodyType(qCreatedBy(makeId(${JSON.stringify(ref.featureId)}), EntityType.BODY), BodyType.SOLID)`,
+  };
+}
+
+function describeBodyRef(ref: BodyRef): string {
+  return ref.partId ? `part ${ref.partId}` : `feature ${ref.featureId}`;
 }

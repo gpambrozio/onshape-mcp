@@ -14,6 +14,13 @@ const VALUE_PARAMETER: Record<VariableType, string> = {
   ANY: "anyValue",
 };
 
+/** The name Onshape gives every Variable feature. A feature name is itself a
+ *  template — `#param` shows that parameter's value and `##` is a literal `#` —
+ *  so the feature list reads "#wall = 0.25 in". Spelling the name out instead
+ *  ("#wall = 0.25 in") makes `#wall` a reference to a parameter that does not
+ *  exist, and the list shows "? = 0.25 in". */
+export const VARIABLE_NAME_TEMPLATE = "###name = #value";
+
 const ANGLE_UNITS = /\b(deg|degree|degrees|rad|radian|radians)\b/i;
 const LENGTH_UNITS = /\b(in|inch|inches|ft|foot|feet|yd|mm|cm|m|meter|metre|meters|metres)\b|"/i;
 
@@ -37,7 +44,11 @@ export function buildAssignVariable(input: {
     pEnum("variableType", "VariableType", variableType),
     pString("name", input.name),
     pQuantity(VALUE_PARAMETER[variableType], 0, "", { expression: input.expression }),
+    // The hidden parameter the name template shows. Onshape's editing logic
+    // copies the typed value into it in the UI, but editing logic does not run
+    // for features posted through the API.
+    pQuantity("value", 0, "", { expression: input.expression }),
   ];
   if (input.description) parameters.push(pString("description", input.description));
-  return featureCall("assignVariable", `#${input.name} = ${input.expression}`, parameters);
+  return featureCall("assignVariable", VARIABLE_NAME_TEMPLATE, parameters);
 }

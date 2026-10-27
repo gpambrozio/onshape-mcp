@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { decodeFsValue, featurescriptMessages } from "../api/fsvalue.js";
+import type { BodyRef } from "../api/partstudio.js";
 import { isRecord } from "../api/util.js";
 import { addPartStudioFeature, run } from "./feature-helpers.js";
 import { docWsShape, fail, ok, requireDocWs, requireTarget, targetShape, toolError, validateShape } from "./shapes.js";
@@ -12,6 +13,22 @@ const configurationShape = z
   .string()
   .optional()
   .describe("Encoded configuration string from onshape_encode_configuration.");
+
+const bodyRefShape = (which: string) =>
+  z
+    .object({
+      part: z.string().min(1).optional().describe("Part id, from onshape_get_parts."),
+      feature: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Id of the feature that created the body, e.g. an extrude with op NEW."),
+    })
+    .describe(`The ${which} body: give exactly one of part or feature.`);
+
+function bodyRefFrom(arg: Record<string, any>): BodyRef {
+  return { partId: arg.part, featureId: arg.feature };
+}
 
 export const partStudioTools: ToolDef[] = [
   {
@@ -105,6 +122,26 @@ export const partStudioTools: ToolDef[] = [
     handler: (args, ctx) => {
       const t = requireTarget(args);
       return run(ctx, () => ctx.api().partStudios.measure(t.doc, t.ws, t.elem));
+    },
+  },
+  {
+    name: "onshape_clearance",
+    title: "Measure clearance between two bodies",
+    description:
+      "Minimum distance between two solid bodies in the same Part Studio, each named by part id or by the feature " +
+      "that created it. 0 (clear: false) means they touch or overlap, so this is also the interference check — e.g. " +
+      "a bracket against a dummy servo body. Returns inches and millimetres, plus the closest point on each body.",
+    inputSchema: {
+      ...targetShape,
+      a: bodyRefShape("first"),
+      b: bodyRefShape("second"),
+    },
+    annotations: { readOnlyHint: true },
+    handler: (args, ctx) => {
+      const t = requireTarget(args);
+      return run(ctx, () =>
+        ctx.api().partStudios.clearance(t.doc, t.ws, t.elem, bodyRefFrom(args.a), bodyRefFrom(args.b)),
+      );
     },
   },
   {

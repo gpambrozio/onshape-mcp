@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
+### Added
+
+- `onshape_clearance`: the minimum distance between two solid bodies, each named
+  by part id or by the feature that created it, in inches and millimetres with
+  the closest points. Zero means the bodies touch or overlap, so it doubles as
+  an interference check.
+- `onshape_extrude` and `onshape_hole` take `end_type` (`BLIND`, `SYMMETRIC` or
+  `THROUGH_ALL`) and `opposite`. A through-all cut needs no depth, and a
+  symmetric extrude spends its depth half on each side of the sketch plane.
+
+### Changed
+
+- **`onshape_export_stl` now writes millimetres by default**, not inches. STL
+  carries no unit and slicers read it as millimetres, so the old default printed
+  parts 25.4 times too small. Pass `units: "inch"` for the previous behaviour.
+  The result now states the unit used.
+
+### Fixed
+
+- `onshape_set_variable` on accounts without the variable table appended a new
+  Variable feature every time, so setting an existing name changed nothing built
+  before the new feature, and said nothing about it. It now rewrites the existing
+  feature in place, keeping its description unless given a new one, and reports
+  `action: "updated"` or `"created"`.
+- Variables created by `onshape_set_variable`'s feature fallback showed as
+  `? = 1.5 mm` in the feature list. Onshape treats a feature name as a template
+  (`#param` shows a parameter), so the name `#gear_module = 1.5 mm` referred to
+  a parameter that does not exist. The feature now carries Onshape's own name,
+  `###name = #value`, and the hidden `value` parameter that name displays,
+  exactly as a Variable made in the UI does. Setting the variable again repairs
+  a feature created with the old name.
+- `construction: true` was ignored on arcs in `onshape_create_sketch`.
+- `onshape_find_circular_edges` returned `[]` on every part, and
+  `onshape_get_edges` labelled arcs and circles as lines. Both read the radius
+  from the edge's `geometry`, but `/bodydetails` describes the curve (type,
+  radius, centre) under `curve`. Circular edges now also report their centre in
+  inches, which tells a hole rim from a fillet arc of the same radius.
+
 ## [0.1.2] - 2026-09-21
 
 ### Fixed
@@ -58,7 +98,8 @@ its API layer from:
 - The variable-table endpoint answers 404 on some accounts, so variables are
   read and written through `assignVariable` features when it does.
 
-[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gpambrozio/onshape-mcp/releases/tag/v0.1.0
