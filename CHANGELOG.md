@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `onshape_assembly_relation`: gear, rack-and-pinion, screw and linear
+  relations between mates. It reads the mates' types to pick each one's degree
+  of freedom (`Rz` for a revolute, `Tz` for a slider; a cylindrical mate gives
+  whichever the relation needs), takes the ratio or the distance per revolution
+  in inches, and fails if the relation does not regenerate.
+- `onshape_get_mate_values` and `onshape_set_mate_values`: read and drive mates
+  in inches and degrees through API v10 (v6 accepts writes and ignores them).
+  Setting reads the values back and fails when Onshape did not apply one, as it
+  does for mates with limits enabled.
+- `onshape_update_assembly_feature` and `onshape_delete_assembly_feature`.
+- `onshape_assembly_mate` joins Part Studio mate connectors, given as
+  `{path: [instance id], connector: "FabC_0.mcPinion"}` the way
+  `onshape_get_assembly` lists them, as well as assembly-level ones.
+- `onshape_insert_instance` takes `fixed: true` to insert an instance fixed in
+  place. Onshape has no public call to fix or unfix an instance afterwards.
+- `scripts/smoke.mjs --assembly <doc>` builds a rack and pinion assembly in an
+  existing scratch document and exercises the assembly tools against it.
+
 ### Fixed
 
 - `onshape_get_variables` read a Variable confirmed in the Onshape dialog from
@@ -13,6 +33,17 @@ All notable changes to this project are documented here. The format follows
   a value parameter for every type, the unused ones at defaults, and the reader
   took the last one that did not look like zero. It now reads the slot named by
   the feature's `variableType`, falling back to `value` when there is no type.
+- Relations created through the API regenerated with a bare `ERROR`. Onshape
+  will not solve a relation on a mate that lacks the `secondaryAxisAlignment`
+  parameter, which the UI always writes and `onshape_assembly_mate` did not.
+  Mates now carry it, and `onshape_assembly_relation` adds it to older or
+  hand-written mates before relating them (listed in `completedMates`).
+- `onshape_assembly_mate`, `onshape_assembly_mate_connector`,
+  `onshape_assembly_group` and `onshape_assembly_add_feature` reported success
+  for features that regenerated with `ERROR`. They now re-read the feature
+  states and fail, as the Part Studio tools do; pass `validate: false` to skip.
+- Assembly feature and instance ids containing `/` or `+` got a 404 on update
+  or delete; they are now escaped in the path.
 
 ## [0.2.0] - 2026-10-27
 

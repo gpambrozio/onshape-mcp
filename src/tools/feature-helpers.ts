@@ -44,6 +44,8 @@ export async function addPartStudioFeature(
   }
 }
 
+/** The assembly counterpart: Onshape answers 200 for a mate that regenerates
+ *  with ERROR just as it does for a Part Studio feature. */
 export async function addAssemblyFeature(
   ctx: ToolContext,
   args: Record<string, any>,
@@ -51,11 +53,48 @@ export async function addAssemblyFeature(
 ): Promise<ToolResult> {
   try {
     const target = requireTarget(args);
-    const response = await ctx.api().assemblies.addFeature(target.doc, target.ws, target.elem, build());
-    return ok(ctx, { featureId: featureIdOf(response), response });
+    const feature = build();
+    const assemblies = ctx.api().assemblies;
+    const response = await assemblies.addFeature(target.doc, target.ws, target.elem, feature);
+    return validatedAssemblyFeature(ctx, args, featureIdOf(response), response);
   } catch (error) {
     return toolError(error);
   }
+}
+
+/** Replace an assembly feature and check it still regenerates. */
+export async function updateAssemblyFeature(
+  ctx: ToolContext,
+  args: Record<string, any>,
+  featureId: string,
+  feature: Feature,
+): Promise<ToolResult> {
+  try {
+    const target = requireTarget(args);
+    const response = await ctx.api().assemblies.updateFeature(target.doc, target.ws, target.elem, featureId, feature);
+    return validatedAssemblyFeature(ctx, args, featureId, response);
+  } catch (error) {
+    return toolError(error);
+  }
+}
+
+async function validatedAssemblyFeature(
+  ctx: ToolContext,
+  args: Record<string, any>,
+  featureId: string | null,
+  response: unknown,
+): Promise<ToolResult> {
+  const result: Record<string, unknown> = { featureId, response };
+  if (args.validate !== false && featureId) {
+    const target = requireTarget(args);
+    try {
+      result.validation = await ctx.api().assemblies.validateFeature(target.doc, target.ws, target.elem, featureId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return fail(message, { featureId, response });
+    }
+  }
+  return ok(ctx, result);
 }
 
 /** Wrap a plain read/write call in the standard envelope. */

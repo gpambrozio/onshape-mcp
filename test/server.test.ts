@@ -207,3 +207,36 @@ test("the advertised version matches the package", async () => {
     `server.json description is ${server.description.length} chars; the MCP registry allows 100`,
   );
 });
+
+test("assembly_add_feature fails when the feature regenerates with ERROR", async () => {
+  // Onshape answers 200 to the POST either way; only the feature states read
+  // afterwards show the error. fetch is stubbed, so nothing leaves the process.
+  const savedFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    const body =
+      init?.method === "POST"
+        ? { feature: { featureId: "MREL+1/x" }, featureState: { featureStatus: "ERROR" } }
+        : { featureStates: { "MREL+1/x": { featureStatus: "ERROR" } }, features: [] };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await withCredentials(async () => {
+      const client = await connect();
+      const result: any = await client.callTool({
+        name: "onshape_assembly_add_feature",
+        arguments: { doc: "D", ws: "W", elem: "E", feature: { btType: "BTFeatureDefinitionCall-1406", feature: {} } },
+      });
+      const payload = JSON.parse(result.content[0].text);
+      assert.equal(result.isError, true);
+      assert.match(payload.error, /MREL\+1\/x regenerated with status ERROR/);
+      assert.equal(payload.detail.featureId, "MREL+1/x");
+      assert.deepEqual(requests, ["POST /api/v6/assemblies/d/D/w/W/e/E/features", "GET /api/v6/assemblies/d/D/w/W/e/E/features"]);
+      await client.close();
+    });
+  } finally {
+    globalThis.fetch = savedFetch;
+  }
+});
