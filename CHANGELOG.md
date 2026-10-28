@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `onshape_get_variables` read a Variable confirmed in the Onshape dialog from
+  the wrong slot, for example a 2.5 mm wall as `0.0*deg`. Such a feature carries
+  a value parameter for every type, the unused ones at defaults, and the reader
+  took the last one that did not look like zero. It now reads the slot named by
+  the feature's `variableType`, falling back to `value` when there is no type.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added

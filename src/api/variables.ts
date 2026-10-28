@@ -7,7 +7,7 @@
  *
  * Derived from onshape-cli (MIT, see NOTICE); the feature fallback is new. */
 
-import { buildAssignVariable, type VariableType } from "../builders/variables.js";
+import { buildAssignVariable, VALUE_PARAMETER, type VariableType } from "../builders/variables.js";
 import { HttpError, type OnshapeClient } from "./client.js";
 import { isRecord } from "./util.js";
 
@@ -36,7 +36,7 @@ export interface VariableWrite {
   response: unknown;
 }
 
-const VALUE_PARAMETERS = new Set(["lengthValue", "angleValue", "numberValue", "anyValue"]);
+const VALUE_PARAMETERS = new Set<string>(Object.values(VALUE_PARAMETER));
 
 export class VariableManager {
   constructor(private readonly client: OnshapeClient) {}
@@ -156,24 +156,41 @@ export class VariableManager {
       if (!isRecord(feature) || feature.featureType !== "assignVariable") continue;
       const parameters = Array.isArray(feature.parameters) ? feature.parameters : [];
       let name = "";
-      let expression = "";
+      let variableType = "";
       let description: string | null = null;
+      const expressions = new Map<string, string>();
 
       for (const parameter of parameters) {
         if (!isRecord(parameter)) continue;
-        if (parameter.parameterId === "name") name = String(parameter.value ?? "");
-        else if (parameter.parameterId === "description" && parameter.value) description = String(parameter.value);
-        else if (VALUE_PARAMETERS.has(String(parameter.parameterId)) && parameter.expression) {
-          const candidate = String(parameter.expression);
-          // A Variable feature carries a parameter per type; the ones it is not
-          // using are left at their zero defaults.
-          if (!isZeroDefault(candidate)) expression = candidate;
+        const id = String(parameter.parameterId);
+        if (id === "name") name = String(parameter.value ?? "");
+        else if (id === "variableType") variableType = String(parameter.value ?? "");
+        else if (id === "description" && parameter.value) description = String(parameter.value);
+        else if ((VALUE_PARAMETERS.has(id) || id === "value") && parameter.expression) {
+          expressions.set(id, String(parameter.expression));
         }
       }
+      const expression = variableExpression(variableType, expressions);
       if (name) variables.push({ name, expression, description, featureId: String(feature.featureId ?? "") });
     }
     return variables;
   }
+}
+
+/** A Variable feature written by the Onshape dialog carries a parameter for
+ *  every type, the unused ones at defaults such as `0.0*deg`, and its `value`
+ *  may be stale. The slot named by `variableType` is the one Onshape evaluates. */
+function variableExpression(variableType: string, expressions: Map<string, string>): string {
+  const slot = VALUE_PARAMETER[variableType as VariableType];
+  const typed = slot ? expressions.get(slot) : undefined;
+  if (typed) return typed;
+  const value = expressions.get("value");
+  if (value) return value;
+  // No type to go by: take a typed slot that is not left at its zero default.
+  for (const [id, candidate] of expressions) {
+    if (VALUE_PARAMETERS.has(id) && !isZeroDefault(candidate)) return candidate;
+  }
+  return "";
 }
 
 function isZeroDefault(expression: string): boolean {
