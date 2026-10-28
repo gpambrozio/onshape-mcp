@@ -7,7 +7,7 @@ export type VariableType = "LENGTH" | "ANGLE" | "NUMBER" | "ANY";
 
 /** Onshape keeps a separate parameter per variable type; writing the wrong one
  *  leaves the variable at zero. */
-const VALUE_PARAMETER: Record<VariableType, string> = {
+export const VALUE_PARAMETER: Record<VariableType, string> = {
   LENGTH: "lengthValue",
   ANGLE: "angleValue",
   NUMBER: "numberValue",

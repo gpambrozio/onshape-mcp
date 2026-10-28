@@ -126,6 +126,124 @@ test("set_variable still uses the variable table where it exists", async () => {
   assert.equal(calls.length, 1);
 });
 
+/** A parameter of a Variable feature as `get_features` returns it. */
+function quantity(parameterId: string, expression: string) {
+  return { btType: "BTMParameterQuantity-147", parameterId, value: 0, expression };
+}
+
+function enumParameter(parameterId: string, value: string) {
+  return { btType: "BTMParameterEnum-145", parameterId, value };
+}
+
+function stringParameter(parameterId: string, value: string) {
+  return { btType: "BTMParameterString-149", parameterId, value };
+}
+
+/** A Variable feature confirmed in the Onshape dialog, trimmed from the talk
+ *  document's `#wall`: every typed slot is present, the unused ones at their
+ *  defaults, interleaved with the measure and lookup-table fields. */
+function dialogVariableFeature(featureId: string, variableType: string, slots: Record<string, string>) {
+  return {
+    btType: "BTMFeature-134",
+    featureType: "assignVariable",
+    featureId,
+    name: "###name = #value",
+    parameters: [
+      enumParameter("mode", "ASSIGNED"),
+      enumParameter("variableType", variableType),
+      enumParameter("measurementMode", "DISTANCE"),
+      stringParameter("name", "wall"),
+      quantity("lengthValue", slots.lengthValue ?? "0.0*mm"),
+      quantity("customOffset", "0.0*mm"),
+      quantity("distance", "0.0*mm"),
+      quantity("conversionFactor", "0"),
+      quantity("rowIndex", "0"),
+      quantity("value", slots.value ?? "0"),
+      quantity("anyValue", slots.anyValue ?? "0"),
+      quantity("numberValue", slots.numberValue ?? "0.0"),
+      quantity("angleValue", slots.angleValue ?? "0.0*deg"),
+      stringParameter("description", "Wall thickness of the upright and the base"),
+    ],
+  };
+}
+
+async function readVariables(features: unknown[]) {
+  const { client } = featureRouteStudio(features);
+  const listing = await new VariableManager(client).getVariables("D", "W", "E");
+  assert.equal(listing.source, "assign-variable-feature");
+  return listing.variables;
+}
+
+test("get_variables reads a dialog-written Variable from the slot its type names", async () => {
+  // The talk document's #wall read as "0.0*deg": angleValue, an unused slot,
+  // comes after lengthValue and its default slipped past the zero check.
+  const [wall] = await readVariables([
+    dialogVariableFeature("FLlNNn5eSgDIuUK_0", "LENGTH", { lengthValue: "2.5 mm", value: "2.5 mm" }),
+  ]);
+  assert.equal(wall.name, "wall");
+  assert.equal(wall.expression, "2.5 mm");
+  assert.equal(wall.description, "Wall thickness of the upright and the base");
+  assert.equal(wall.featureId, "FLlNNn5eSgDIuUK_0");
+});
+
+test("get_variables trusts the typed slot over a stale value parameter", async () => {
+  // Before the talk document was repaired, #wall's value parameter said 0
+  // while Onshape evaluated lengthValue, 2.5 mm.
+  const [wall] = await readVariables([
+    dialogVariableFeature("FWALL", "LENGTH", { lengthValue: "2.5 mm", value: "0" }),
+  ]);
+  assert.equal(wall.expression, "2.5 mm");
+});
+
+test("get_variables reads each variable type from its own slot", async () => {
+  const cases: { variableType: string; slots: Record<string, string>; expected: string }[] = [
+    { variableType: "LENGTH", slots: { lengthValue: "0.125 in" }, expected: "0.125 in" },
+    { variableType: "ANGLE", slots: { angleValue: "30 deg" }, expected: "30 deg" },
+    { variableType: "NUMBER", slots: { numberValue: "36" }, expected: "36" },
+    { variableType: "ANY", slots: { anyValue: "true" }, expected: "true" },
+    // A variable really set to zero reads as zero, not as another slot.
+    { variableType: "ANGLE", slots: { angleValue: "0 deg", lengthValue: "1 mm" }, expected: "0 deg" },
+  ];
+  for (const { variableType, slots, expected } of cases) {
+    const [variable] = await readVariables([dialogVariableFeature("F", variableType, slots)]);
+    assert.equal(variable.expression, expected, `${variableType} ${JSON.stringify(slots)}`);
+  }
+});
+
+test("get_variables reads the minimal Variable features the API writes", async () => {
+  const variables = await readVariables([
+    variableFeature("F1", "bracket_width", "50 mm", "Bracket width along X"),
+    variableFeature("F2", "pivot", "15 deg"),
+    variableFeature("F3", "gear_teeth", "36"),
+    variableFeature("F4", "label", '"left"'),
+    { featureType: "extrude", featureId: "FEXT", parameters: [] },
+  ]);
+  assert.deepEqual(
+    variables.map(({ name, expression, description }) => ({ name, expression, description })),
+    [
+      { name: "bracket_width", expression: "50 mm", description: "Bracket width along X" },
+      { name: "pivot", expression: "15 deg", description: null },
+      { name: "gear_teeth", expression: "36", description: null },
+      { name: "label", expression: '"left"', description: null },
+    ],
+  );
+});
+
+test("get_variables falls back to value, then a set slot, when the type is missing", async () => {
+  const [byValue] = await readVariables([
+    { featureType: "assignVariable", featureId: "F1", parameters: [stringParameter("name", "a"), quantity("value", "3 mm")] },
+  ]);
+  assert.equal(byValue.expression, "3 mm");
+  const [bySlot] = await readVariables([
+    {
+      featureType: "assignVariable",
+      featureId: "F2",
+      parameters: [stringParameter("name", "b"), quantity("lengthValue", "0 mm"), quantity("numberValue", "4")],
+    },
+  ]);
+  assert.equal(bySlot.expression, "4");
+});
+
 test("clearance passes part ids as queries and reports the gap", async () => {
   const { client, calls } = fakeClient(() => ({
     result: fsMap({ distance: 0.05, a: [1, 0, 0.25], b: [1, 0, 0.3] }),
