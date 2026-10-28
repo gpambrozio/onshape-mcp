@@ -1,6 +1,6 @@
 # Onshape MCP server
 
-Drive [Onshape](https://www.onshape.com) CAD from an AI assistant. 88 tools for
+Drive [Onshape](https://www.onshape.com) CAD from an AI assistant. 93 tools for
 documents, part studios, sketching, solid features, assemblies, drawings,
 measurement and export — and no setup beyond installing it: the first tool call
 that needs Onshape opens a browser and asks you to connect.
@@ -90,7 +90,7 @@ An existing [`onshape-cli`](https://github.com/am-will/onshape-cli) credential a
 | Geometry | `get_edges`, `find_circular_edges`, `find_edges_by_feature` |
 | Variables | `get_variables`, `set_variable`, `get_configuration`, `encode_configuration` |
 | Export | `export_stl`, `export`, `shaded_view`, `get_thumbnail`, `thumbnail_info` |
-| Assemblies | `create_assembly`, `get_assembly`, `insert_instance`, `delete_instance`, `transform_instance`, `get_assembly_features`, `assembly_mate_connector`, `assembly_mate`, `assembly_group`, `assembly_add_feature`, `get_bom`, `assembly_mass_properties` |
+| Assemblies | `create_assembly`, `get_assembly`, `insert_instance`, `delete_instance`, `transform_instance`, `get_assembly_features`, `assembly_mate_connector`, `assembly_mate`, `assembly_relation`, `assembly_group`, `assembly_add_feature`, `update_assembly_feature`, `delete_assembly_feature`, `get_mate_values`, `set_mate_values`, `get_bom`, `assembly_mass_properties` |
 | Drawings | `create_drawing`, `get_drawing_views`, `export_drawing` |
 | Feature studios | `create_feature_studio`, `get_feature_studio`, `set_feature_studio`, `get_feature_studio_specs` |
 | Metadata | `get_metadata`, `set_metadata` |
@@ -106,6 +106,12 @@ Worth knowing:
 - **Feature tools validate by default.** Onshape answers `200` for a feature
   that fails to regenerate, so each tool re-reads the feature state and fails
   loudly instead. Pass `validate: false` to skip it.
+- **Assemblies:** `assembly_mate` joins Part Studio mate connectors directly
+  (`{path: [instance id], connector: "FabC_0.mcPinion"}`, as `get_assembly`
+  lists them), `insert_instance` takes `fixed: true` to ground an instance, and
+  `assembly_relation` couples mates as gear, rack and pinion, screw or linear.
+  `set_mate_values` drives mates in inches and degrees and fails when Onshape
+  ignores a value, which it does for mates with limits enabled.
 - **Renders come back as images.** `shaded_view` and `get_thumbnail` return the
   PNG inline as well as writing it, so the model can see the part.
 - **Big reads spill to disk.** Anything over `ONSHAPE_MCP_MAX_RESPONSE_BYTES`
@@ -145,6 +151,11 @@ These come from Onshape, not from this server:
   `403 Invalid API key state`; re-create the key at
   [cad.onshape.com/user/developer/apiKeys](https://cad.onshape.com/user/developer/apiKeys)
   with Delete ticked.
+- **An instance can only be fixed when it is inserted.** There is no public
+  call to fix or unfix one later; insert it again with `fixed` and delete the
+  old one.
+- **Mate values need API version 10.** Older versions accept a write and ignore
+  it; `get_mate_values` and `set_mate_values` use v10.
 - **The variable-table endpoint 404s on some accounts.** `onshape_set_variable`
   and `onshape_get_variables` fall back to `assignVariable` features, which work
   everywhere; `result.route` / `result.source` says which path was taken. Setting
@@ -161,6 +172,7 @@ npm run bundle    # build the Claude Desktop .mcpb
 
 node scripts/smoke.mjs           # live read-only check against your account
 node scripts/smoke.mjs --write   # also builds a throwaway part
+node scripts/smoke.mjs --assembly <doc>   # rack and pinion assembly in a scratch document
 ```
 
 Layout: `src/auth` (credential store, keychain, login flows, OAuth, elicitation),

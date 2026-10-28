@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { AssemblyManager } from "../src/api/assemblies.js";
 import { HttpError, type OnshapeClient } from "../src/api/client.js";
 import { EdgeQuery } from "../src/api/edges.js";
 import { ExportManager } from "../src/api/export.js";
@@ -12,7 +13,7 @@ import { VariableManager } from "../src/api/variables.js";
 import { buildAssignVariable } from "../src/builders/variables.js";
 
 interface Call {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   path: string;
   body?: any;
   params?: Record<string, unknown>;
@@ -31,6 +32,7 @@ function fakeClient(respond: (call: Call) => unknown): { client: OnshapeClient; 
   const client = {
     get: async (path: string, params?: Record<string, unknown>) => answer({ method: "GET", path, params }),
     post: async (path: string, body?: unknown) => answer({ method: "POST", path, body }),
+    delete: async (path: string) => answer({ method: "DELETE", path }),
     getBinary: async (path: string, params?: Record<string, unknown>) => {
       answer({ method: "GET", path, params });
       return { buffer: Buffer.from("solid"), contentType: "application/octet-stream", status: 200 };
@@ -347,4 +349,153 @@ test("circular edges are found from the curve bodydetails describes", async () =
   );
   const holes = await edges.findCircularEdges("D", "W", "E", 0.1);
   assert.deepEqual(holes, [{ id: "JMB", body: "JHD", type: "circle", radius: 0.1, center: [1, 0, 0.5] }]);
+});
+
+const ASSEMBLY = "/api/v6/assemblies/d/D/w/W/e/E";
+
+/** An assembly feature as GET .../features lists it. */
+function mateFeature(featureId: string, mateType: string, extra: unknown[] = []) {
+  return {
+    btType: "BTMMate-64",
+    featureType: "mate",
+    featureId,
+    name: featureId,
+    parameters: [{ btType: "BTMParameterEnum-145", parameterId: "mateType", value: mateType }, ...extra],
+  };
+}
+
+test("assembly feature and instance ids are escaped in the path", async () => {
+  // Onshape answers 404 to an unescaped "/" or "+" in these ids.
+  const { client, calls } = fakeClient(() => ({ ok: true }));
+  const assemblies = new AssemblyManager(client);
+  await assemblies.updateFeature("D", "W", "E", "MDYD+d9/FoW", { feature: {} });
+  await assemblies.deleteFeature("D", "W", "E", "MDYD+d9/FoW");
+  await assemblies.deleteInstance("D", "W", "E", "MJA/BWH");
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.path}`),
+    [
+      `POST ${ASSEMBLY}/features/featureid/MDYD%2Bd9%2FFoW`,
+      `DELETE ${ASSEMBLY}/features/featureid/MDYD%2Bd9%2FFoW`,
+      `DELETE ${ASSEMBLY}/instance/nodeid/MJA%2FBWH`,
+    ],
+  );
+});
+
+test("an instance can be inserted fixed", async () => {
+  const { client, calls } = fakeClient(() => ({ ok: true }));
+  const assemblies = new AssemblyManager(client);
+  await assemblies.insertInstance("D", "W", "E", { sourceDocumentId: "D", sourceElementId: "PS", partId: "JHD", isFixed: true });
+  await assemblies.insertInstance("D", "W", "E", { sourceDocumentId: "D", sourceElementId: "PS", partId: "JLD" });
+  assert.equal(calls[0].body.isFixed, true);
+  assert.equal("isFixed" in calls[1].body, false);
+});
+
+test("an assembly feature that regenerates with ERROR fails validation", async () => {
+  const { client } = fakeClient(() => ({
+    featureStates: { MOK: { featureStatus: "OK" }, MBAD: { featureStatus: "ERROR" } },
+  }));
+  const assemblies = new AssemblyManager(client);
+  assert.deepEqual(await assemblies.validateFeature("D", "W", "E", "MOK"), { featureId: "MOK", featureStatus: "OK" });
+  await assert.rejects(assemblies.validateFeature("D", "W", "E", "MBAD"), /MBAD regenerated with status ERROR/);
+});
+
+/** An assembly with these features, where a new feature regenerates as
+ *  `status`. */
+function relationAssembly(features: unknown[], status = "OK") {
+  return fakeClient((call) => {
+    if (call.method === "GET") return { features, featureStates: { MREL: { featureStatus: status } } };
+    if (call.path.endsWith("/features")) return { feature: { featureId: "MREL" } };
+    return { ok: true };
+  });
+}
+
+test("a relation completes hand-written mates, then couples Rz to Tz", async () => {
+  const { client, calls } = relationAssembly([
+    mateFeature("MRev", "REVOLUTE"),
+    mateFeature("MSl/d", "SLIDER", [{ parameterId: "secondaryAxisAlignment", value: "PLUS_X" }]),
+  ]);
+  const result = await new AssemblyManager(client).addMateRelation("D", "W", "E", {
+    relationType: "RACK_AND_PINION",
+    mateIds: ["MRev", "MSl/d"],
+    distancePerRevolution: 2.5,
+  });
+
+  assert.deepEqual(result.dofs, ["Rz", "Tz"]);
+  assert.deepEqual(result.completedMates, ["MRev"], "only the mate missing the parameter is rewritten");
+  const posts = calls.filter((call) => call.method === "POST");
+  assert.equal(posts[0].path, `${ASSEMBLY}/features/featureid/MRev`);
+  assert.ok(posts[0].body.feature.parameters.some((param: any) => param.parameterId === "secondaryAxisAlignment"));
+  assert.equal(posts[1].path, `${ASSEMBLY}/features`);
+  const queries = posts[1].body.feature.parameters.find((param: any) => param.parameterId === "matesQuery").queries;
+  assert.deepEqual(
+    queries.map((query: any) => [query.featureId, query.queryData]),
+    [
+      ["MRev", "Rz"],
+      ["MSl/d", "Tz"],
+    ],
+  );
+  assert.deepEqual(result.validation, { featureId: "MREL", featureStatus: "OK" });
+});
+
+test("a relation that does not solve, or names a missing mate, fails", async () => {
+  const mates = [mateFeature("MA", "REVOLUTE"), mateFeature("MB", "REVOLUTE")];
+  const failing = relationAssembly(mates, "ERROR").client;
+  await assert.rejects(
+    new AssemblyManager(failing).addMateRelation("D", "W", "E", { relationType: "GEAR", mateIds: ["MA", "MB"] }),
+    /MREL regenerated with status ERROR/,
+  );
+  const { client, calls } = relationAssembly(mates);
+  await assert.rejects(
+    new AssemblyManager(client).addMateRelation("D", "W", "E", { relationType: "GEAR", mateIds: ["MA", "MX"] }),
+    /No mate with feature id MX/,
+  );
+  assert.equal(calls.filter((call) => call.method === "POST").length, 0, "nothing is written for a missing mate");
+});
+
+/** Mate values that read back as `after` once anything has been posted. */
+function mateValueAssembly(before: unknown[], after: unknown[]) {
+  let posted = false;
+  return fakeClient((call) => {
+    if (call.method === "POST") {
+      posted = true;
+      return { ok: true };
+    }
+    return { mateValues: posted ? after : before };
+  });
+}
+
+test("mate values are written through v10 with the mate's own entry", async () => {
+  // v6 accepts the same POST and silently ignores it.
+  const revolute = { featureId: "MRev", mateName: "Pinion", jsonType: "Revolute", rotationZ: 0, ownerOccurrencePath: [] };
+  const { client, calls } = mateValueAssembly([revolute], [{ ...revolute, rotationZ: -Math.PI / 2 }]);
+  const after = await new AssemblyManager(client).setMateValues("D", "W", "E", [
+    // 270 degrees reads back as -90.
+    { featureId: "MRev", values: { rotationZ: (3 * Math.PI) / 2 } },
+  ]);
+
+  const post = calls.find((call) => call.method === "POST");
+  assert.equal(post?.path, "/api/v10/assemblies/d/D/w/W/e/E/matevalues");
+  assert.deepEqual(post?.body, { mateValues: [{ ...revolute, rotationZ: (3 * Math.PI) / 2 }] });
+  assert.equal(after[0].rotationZ, -Math.PI / 2);
+});
+
+test("a mate value Onshape ignores, or a degree of freedom the mate lacks, is an error", async () => {
+  const slider = { featureId: "MSl", mateName: "Rack", jsonType: "Slider", translationZ: 0, ownerOccurrencePath: [] };
+  const limited = mateValueAssembly([slider], [slider]).client;
+  await assert.rejects(
+    new AssemblyManager(limited).setMateValues("D", "W", "E", [{ featureId: "MSl", values: { translationZ: 0.01 } }]),
+    /did not apply them.*MSl translationZ: asked 0.01, reads 0.*limits/,
+  );
+
+  const { client, calls } = mateValueAssembly([slider], [slider]);
+  const assemblies = new AssemblyManager(client);
+  await assert.rejects(
+    assemblies.setMateValues("D", "W", "E", [{ featureId: "MSl", values: { rotationZ: 1 } }]),
+    /MSl \(Slider\) has no rotationZ; it has translationZ/,
+  );
+  await assert.rejects(
+    assemblies.setMateValues("D", "W", "E", [{ featureId: "MNone", values: { translationZ: 1 } }]),
+    /No top-level mate MNone.*MSl \(Rack\)/,
+  );
+  assert.equal(calls.filter((call) => call.method === "POST").length, 0);
 });
