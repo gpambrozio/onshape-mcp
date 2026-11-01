@@ -5,7 +5,7 @@
 import { isRecord } from "../api/util.js";
 import type { Feature } from "../builders/params.js";
 import type { ToolContext } from "./context.js";
-import { ok, requireTarget, toolError } from "./shapes.js";
+import { fail, ok, requireTarget, toolError } from "./shapes.js";
 import { featureWriteResult, type FeatureWriteSummary } from "./feature-results.js";
 import type { ToolResult } from "./types.js";
 

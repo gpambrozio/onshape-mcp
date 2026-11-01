@@ -119,6 +119,7 @@ export class AssemblyManager {
     const states = isRecord(features) && isRecord(features.featureStates) ? features.featureStates : {};
     const state = isRecord(states[featureId]) ? states[featureId] : {};
     const status = typeof state.featureStatus === "string" ? state.featureStatus : null;
+    if (!status) throw new Error(`Cannot verify regeneration: assembly feature ${featureId} has no featureStatus.`);
     if (status === "ERROR") throw new Error(`Assembly feature ${featureId} regenerated with status ERROR.`);
     return { featureId, featureStatus: status };
   }
