@@ -6,6 +6,87 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
+### Added
+
+- `onshape_assembly_relation`: gear, rack-and-pinion, screw and linear
+  relations between mates. It reads the mates' types to pick each one's degree
+  of freedom (`Rz` for a revolute, `Tz` for a slider; a cylindrical mate gives
+  whichever the relation needs), takes the ratio or the distance per revolution
+  in inches, and fails if the relation does not regenerate.
+- `onshape_get_mate_values` and `onshape_set_mate_values`: read and drive mates
+  in inches and degrees through API v10 (v6 accepts writes and ignores them).
+  Setting reads the values back and fails when Onshape did not apply one, as it
+  does for mates with limits enabled.
+- `onshape_update_assembly_feature` and `onshape_delete_assembly_feature`.
+- `onshape_assembly_mate` joins Part Studio mate connectors, given as
+  `{path: [instance id], connector: "FabC_0.mcPinion"}` the way
+  `onshape_get_assembly` lists them, as well as assembly-level ones.
+- `onshape_insert_instance` takes `fixed: true` to insert an instance fixed in
+  place. Onshape has no public call to fix or unfix an instance afterwards.
+- `scripts/smoke.mjs --assembly <doc>` builds a rack and pinion assembly in an
+  existing scratch document and exercises the assembly tools against it.
+
+### Fixed
+
+- `onshape_get_variables` read a Variable confirmed in the Onshape dialog from
+  the wrong slot, for example a 2.5 mm wall as `0.0*deg`. Such a feature carries
+  a value parameter for every type, the unused ones at defaults, and the reader
+  took the last one that did not look like zero. It now reads the slot named by
+  the feature's `variableType`, falling back to `value` when there is no type.
+- Relations created through the API regenerated with a bare `ERROR`. Onshape
+  will not solve a relation on a mate that lacks the `secondaryAxisAlignment`
+  parameter, which the UI always writes and `onshape_assembly_mate` did not.
+  Mates now carry it, and `onshape_assembly_relation` adds it to older or
+  hand-written mates before relating them (listed in `completedMates`).
+- `onshape_assembly_mate`, `onshape_assembly_mate_connector`,
+  `onshape_assembly_group` and `onshape_assembly_add_feature` reported success
+  for features that regenerated with `ERROR`. They now re-read the feature
+  states and fail, as the Part Studio tools do; pass `validate: false` to skip.
+- Assembly feature and instance ids containing `/` or `+` got a 404 on update
+  or delete; they are now escaped in the path.
+
+## [0.2.0] - 2026-10-27
+
+### Added
+
+- `onshape_clearance`: the minimum distance between two solid bodies, each named
+  by part id or by the feature that created it, in inches and millimetres with
+  the closest points. Zero means the bodies touch or overlap, so it doubles as
+  an interference check.
+- `onshape_extrude` and `onshape_hole` take `end_type` (`BLIND`, `SYMMETRIC` or
+  `THROUGH_ALL`) and `opposite`. A through-all cut needs no depth, and a
+  symmetric extrude spends its depth half on each side of the sketch plane.
+
+### Changed
+
+- **`onshape_export_stl` now writes millimetres by default**, not inches. STL
+  carries no unit and slicers read it as millimetres, so the old default printed
+  parts 25.4 times too small. Pass `units: "inch"` for the previous behaviour.
+  The result now states the unit used.
+
+### Fixed
+
+- `onshape_set_variable` on accounts without the variable table appended a new
+  Variable feature every time, so setting an existing name changed nothing built
+  before the new feature, and said nothing about it. It now rewrites the existing
+  feature in place, keeping its description unless given a new one, and reports
+  `action: "updated"` or `"created"`.
+- Variables created by `onshape_set_variable`'s feature fallback showed as
+  `? = 1.5 mm` in the feature list. Onshape treats a feature name as a template
+  (`#param` shows a parameter), so the name `#gear_module = 1.5 mm` referred to
+  a parameter that does not exist. The feature now carries Onshape's own name,
+  `###name = #value`, and the hidden `value` parameter that name displays,
+  exactly as a Variable made in the UI does. Setting the variable again repairs
+  a feature created with the old name.
+- `construction: true` was ignored on arcs in `onshape_create_sketch`.
+- `onshape_find_circular_edges` returned `[]` on every part, and
+  `onshape_get_edges` labelled arcs and circles as lines. Both read the radius
+  from the edge's `geometry`, but `/bodydetails` describes the curve (type,
+  radius, centre) under `curve`. Circular edges now also report their centre in
+  inches, which tells a hole rim from a fillet arc of the same radius.
+
 ## [0.1.2] - 2026-09-21
 
 ### Fixed
@@ -58,7 +139,9 @@ its API layer from:
 - The variable-table endpoint answers 404 on some accounts, so variables are
   read and written through `assignVariable` features when it does.
 
-[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/gpambrozio/onshape-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gpambrozio/onshape-mcp/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gpambrozio/onshape-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gpambrozio/onshape-mcp/releases/tag/v0.1.0

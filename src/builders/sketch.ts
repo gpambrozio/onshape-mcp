@@ -53,7 +53,14 @@ export function lineEntity(id: string, start: Point2, end: Point2, isConstructio
 }
 
 /** Arc angles are degrees, counter-clockwise from +X. */
-export function arcEntity(id: string, center: Point2, radius: number, startAngle: number, endAngle: number): Feature {
+export function arcEntity(
+  id: string,
+  center: Point2,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  isConstruction = false,
+): Feature {
   if (radius <= 0) throw new Error("Arc radius must be positive.");
   return {
     btType: "BTMSketchCurveSegment-155",
@@ -72,7 +79,7 @@ export function arcEntity(id: string, center: Point2, radius: number, startAngle
       yDir: 0,
       clockwise: false,
     },
-    isConstruction: false,
+    isConstruction,
   };
 }
 
@@ -215,6 +222,7 @@ export function buildSketchFromEntities(input: {
             Number(entity.radius),
             Number(entity.startAngle ?? 0),
             Number(entity.endAngle ?? 90),
+            construction,
           ),
         );
         break;

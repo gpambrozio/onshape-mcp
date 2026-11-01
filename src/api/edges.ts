@@ -7,6 +7,8 @@ import { isRecord } from "./util.js";
 
 const INCH_TO_METER = 0.0254;
 
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+
 export class EdgeQuery {
   constructor(private readonly client: OnshapeClient) {}
 
@@ -21,13 +23,19 @@ export class EdgeQuery {
       if (!isRecord(body)) continue;
       for (const edge of Array.isArray(body.edges) ? body.edges : []) {
         if (!isRecord(edge)) continue;
+        // bodydetails describes the underlying curve (type, radius, centre) in
+        // `curve`; `geometry` only holds the edge's end and sample points.
+        const curve = isRecord(edge.curve) ? edge.curve : {};
         const geom = isRecord(edge.geometry) ? edge.geometry : {};
         const info: Record<string, unknown> = {
           id: edge.id,
           body: body.id,
-          type: String(geometryTypeOf(edge, geom)).toLowerCase(),
+          type: String(geometryTypeOf(edge, curve, geom)).toLowerCase(),
         };
-        if (typeof geom.radius === "number") info.radius = geom.radius / INCH_TO_METER;
+        const radius = typeof curve.radius === "number" ? curve.radius : geom.radius;
+        if (typeof radius === "number") info.radius = round6(radius / INCH_TO_METER);
+        // The centre tells a hole rim from a fillet arc of the same radius.
+        if (typeof radius === "number" && isRecord(curve.origin)) info.center = pointInInches(curve.origin);
         edges.push(info);
       }
     }
@@ -74,8 +82,14 @@ export class EdgeQuery {
   }
 }
 
-/** bodydetails does not always label an edge; infer from the geometry payload. */
-function geometryTypeOf(edge: Record<string, any>, geom: Record<string, any>): string {
+function pointInInches(point: Record<string, any>): number[] {
+  return [point.x, point.y, point.z].map((value) => round6(Number(value) / INCH_TO_METER));
+}
+
+/** bodydetails labels the curve in `curve.type`; older payloads may not, so
+ *  fall back to inferring it from the geometry. */
+function geometryTypeOf(edge: Record<string, any>, curve: Record<string, any>, geom: Record<string, any>): string {
+  if (curve.type) return String(curve.type);
   if (geom.type) return String(geom.type);
   if (edge.geometryType) return String(edge.geometryType);
   const btType = String(geom.btType ?? "");

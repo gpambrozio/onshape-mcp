@@ -3,7 +3,14 @@ import { test } from "node:test";
 
 import { buildExtrude, buildFillet, buildBoolean, buildOffsetPlane } from "../src/builders/features.js";
 import { buildRectangleSketch, buildSketchFromEntities } from "../src/builders/sketch.js";
-import { buildAssemblyMate } from "../src/builders/assembly.js";
+import {
+  buildAssemblyMate,
+  buildMateRelation,
+  mateReadyForRelations,
+  mateValueFromUser,
+  mateValueToUser,
+  relationDofs,
+} from "../src/builders/assembly.js";
 import { buildAssignVariable, inferVariableType } from "../src/builders/variables.js";
 import { parsePoint2, planeId, resolveEntityQuery } from "../src/builders/params.js";
 
@@ -55,6 +62,23 @@ test("degenerate sketch input is rejected before it reaches Onshape", () => {
   );
 });
 
+test("construction is honoured on every free-form entity that takes it", () => {
+  const sketch = buildSketchFromEntities({
+    name: "S",
+    plane: "Front",
+    entities: [
+      { type: "arc", center: [0, 0], radius: 1, startAngle: 0, endAngle: 90, construction: true },
+      { type: "arc", center: [0, 0], radius: 1, startAngle: 90, endAngle: 180 },
+      { type: "line", start: [0, 0], end: [1, 0], construction: true },
+      { type: "circle", center: [0, 0], radius: 0.5, construction: true },
+    ],
+  }) as any;
+  assert.deepEqual(
+    sketch.feature.entities.map((entity: any) => entity.isConstruction),
+    [true, false, true, true],
+  );
+});
+
 test("extrude carries the sketch region, operation and depth expression", () => {
   const extrude = buildExtrude({ name: "E", sketchFeatureId: "FID", depth: 0.25, operationType: "REMOVE" }) as any;
   assert.equal(extrude.btType, "BTFeatureDefinitionCall-1406");
@@ -62,6 +86,43 @@ test("extrude carries the sketch region, operation and depth expression", () => 
   assert.equal(parameter(extrude, "entities").queries[0].featureId, "FID");
   assert.equal(parameter(extrude, "operationType").value, "REMOVE");
   assert.equal(parameter(extrude, "depth").expression, "0.25 in");
+});
+
+test("a blind extrude keeps the payload proven against Onshape", () => {
+  const extrude = buildExtrude({ name: "E", sketchFeatureId: "FID", depth: 0.25, operationType: "NEW" }) as any;
+  assert.deepEqual(
+    parametersOf(extrude).map((param) => param.parameterId),
+    ["entities", "operationType", "depth", "oppositeDirection", "defaultScope"],
+  );
+  assert.equal(parameter(extrude, "oppositeDirection").value, false);
+});
+
+test("an extrude can go the opposite way, symmetrically, or through all", () => {
+  const opposite = buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "REMOVE", opposite: true }) as any;
+  assert.equal(parameter(opposite, "oppositeDirection").value, true);
+
+  const symmetric = buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "NEW", end: "SYMMETRIC" }) as any;
+  assert.equal(parameter(symmetric, "symmetric").value, true);
+  assert.equal(parameter(symmetric, "depth").expression, "1 in");
+  assert.equal(parametersOf(symmetric).some((param) => param.parameterId === "endBound"), false);
+
+  // Through-all needs no depth at all.
+  const through = buildExtrude({ name: "H", sketchFeatureId: "F", operationType: "REMOVE", end: "THROUGH_ALL", opposite: true }) as any;
+  assert.equal(parameter(through, "endBound").enumName, "BoundingType");
+  assert.equal(parameter(through, "endBound").value, "THROUGH_ALL");
+  assert.equal(parameter(through, "oppositeDirection").value, true);
+  assert.equal(parametersOf(through).some((param) => param.parameterId === "depth"), false);
+});
+
+test("extrude options that cannot work are rejected before they reach Onshape", () => {
+  assert.throws(
+    () => buildExtrude({ name: "E", sketchFeatureId: "F", depth: 1, operationType: "NEW", end: "SYMMETRIC", opposite: true }),
+    /no opposite direction/,
+  );
+  assert.throws(() => buildExtrude({ name: "E", sketchFeatureId: "F", operationType: "NEW" }), /needs a depth/);
+  // A variable stands in for the depth.
+  const variable = buildExtrude({ name: "E", sketchFeatureId: "F", operationType: "NEW", end: "SYMMETRIC", depthVariable: "w" }) as any;
+  assert.equal(parameter(variable, "depth").expression, "#w");
 });
 
 test("a variable reference replaces the literal dimension", () => {
@@ -105,11 +166,117 @@ test("an offset plane defaults to the Front plane", () => {
 });
 
 test("a mate needs two connectors", () => {
-  assert.throws(() => buildAssemblyMate({ mateConnectorIds: ["one"] }), /at least two/);
-  const mate = buildAssemblyMate({ mateType: "REVOLUTE", mateConnectorIds: ["a", "b"] }) as any;
+  assert.throws(() => buildAssemblyMate({ mateConnectors: ["one"] }), /at least two/);
+  const mate = buildAssemblyMate({ mateType: "REVOLUTE", mateConnectors: ["a", "b"] }) as any;
   assert.equal(mate.feature.btType, "BTMMate-64");
-  assert.equal(mate.feature.parameters[0].value, "REVOLUTE");
-  assert.equal(mate.feature.parameters[1].queries.length, 2);
+  assert.equal(parameter(mate, "mateType").value, "REVOLUTE");
+  assert.equal(parameter(mate, "mateConnectorsQuery").queries.length, 2);
+});
+
+test("a mate joins assembly connectors and Part Studio connectors alike", () => {
+  const mate = buildAssemblyMate({
+    mateType: "SLIDER",
+    mateConnectors: ["MAsmConnector", { path: ["MRack/x+y"], connector: "FabC_0.mcRack" }],
+  }) as any;
+  const [assemblyLevel, partStudio] = parameter(mate, "mateConnectorsQuery").queries;
+  assert.deepEqual(assemblyLevel, {
+    btType: "BTMFeatureQueryWithOccurrence-157",
+    path: [],
+    featureId: "MAsmConnector",
+    queryData: "",
+  });
+  // The shape the gripper build proved against Onshape by hand.
+  assert.deepEqual(partStudio, {
+    btType: "BTMPartStudioMateConnectorQuery-1324",
+    path: ["MRack/x+y"],
+    featureId: "FabC_0.mcRack",
+  });
+  assert.throws(
+    () => buildAssemblyMate({ mateConnectors: ["a", { path: [], connector: "F.mc" }] }),
+    /occurrence path/,
+  );
+});
+
+test("a mate carries the parameter relations need", () => {
+  // Without secondaryAxisAlignment every relation on the mate regenerates with
+  // a bare ERROR; this is what kept the gripper's rack and pinion unbuilt.
+  const mate = buildAssemblyMate({ mateType: "REVOLUTE", mateConnectors: ["a", "b"] }) as any;
+  assert.equal(parameter(mate, "secondaryAxisAlignment").value, "PLUS_X");
+
+  const handWritten = { btType: "BTMMate-64", featureId: "M1", parameters: [{ parameterId: "mateType", value: "SLIDER" }] };
+  const ready = mateReadyForRelations(handWritten) as any;
+  assert.equal(ready.btType, "BTFeatureDefinitionCall-1406");
+  assert.equal(ready.feature.featureId, "M1");
+  assert.equal(parameter(ready, "mateType").value, "SLIDER");
+  assert.equal(parameter(ready, "secondaryAxisAlignment").value, "PLUS_X");
+  assert.equal(mateReadyForRelations(mate.feature), null, "a complete mate is left alone");
+});
+
+test("relation degrees of freedom follow the mate types", () => {
+  assert.deepEqual(relationDofs("RACK_AND_PINION", ["REVOLUTE", "SLIDER"]), ["Rz", "Tz"]);
+  assert.deepEqual(relationDofs("RACK_AND_PINION", ["SLIDER", "REVOLUTE"]), ["Tz", "Rz"]);
+  assert.deepEqual(relationDofs("RACK_AND_PINION", ["CYLINDRICAL", "SLIDER"]), ["Rz", "Tz"]);
+  assert.deepEqual(relationDofs("GEAR", ["REVOLUTE", "CYLINDRICAL"]), ["Rz", "Rz"]);
+  assert.deepEqual(relationDofs("LINEAR", ["SLIDER", "CYLINDRICAL"]), ["Tz", "Tz"]);
+  assert.deepEqual(relationDofs("SCREW", ["CYLINDRICAL"]), ["Rz"]);
+
+  assert.throws(() => relationDofs("GEAR", ["REVOLUTE", "SLIDER"]), /two REVOLUTE or CYLINDRICAL/);
+  assert.throws(() => relationDofs("RACK_AND_PINION", ["SLIDER", "SLIDER"]), /a REVOLUTE/);
+  assert.throws(() => relationDofs("SCREW", ["REVOLUTE"]), /one CYLINDRICAL/);
+  assert.throws(() => relationDofs("SCREW", ["CYLINDRICAL", "CYLINDRICAL"]), /exactly one/);
+  assert.throws(() => relationDofs("LINEAR", ["SLIDER"]), /exactly two/);
+});
+
+test("a relation payload carries the mates' degrees of freedom and its length or ratio", () => {
+  const rack = buildMateRelation({
+    relationType: "RACK_AND_PINION",
+    mates: [
+      { featureId: "MRev", dof: "Rz" },
+      { featureId: "MSl/d+", dof: "Tz" },
+    ],
+    distancePerRevolution: 2.5,
+  }) as any;
+  assert.equal(rack.feature.btType, "BTMMateRelation-1412");
+  assert.equal(rack.feature.featureType, "mateRelation");
+  assert.equal(parameter(rack, "relationType").value, "RACK_AND_PINION");
+  assert.deepEqual(
+    parameter(rack, "matesQuery").queries.map((query: any) => [query.btType, query.featureId, query.queryData]),
+    [
+      ["BTMFeatureQueryWithOccurrence-157", "MRev", "Rz"],
+      ["BTMFeatureQueryWithOccurrence-157", "MSl/d+", "Tz"],
+    ],
+  );
+  assert.equal(parameter(rack, "relationLength").expression, "2.5 in");
+  assert.equal(parameter(rack, "reverseDirection").value, false);
+  assert.equal(parametersOf(rack).some((param) => param.parameterId === "relationRatio"), false);
+
+  const gear = buildMateRelation({
+    relationType: "GEAR",
+    mates: [
+      { featureId: "A", dof: "Rz" },
+      { featureId: "B", dof: "Rz" },
+    ],
+    ratio: 3,
+    reverse: true,
+  }) as any;
+  assert.equal(parameter(gear, "relationRatio").expression, "3");
+  assert.equal(parameter(gear, "reverseDirection").value, true);
+
+  assert.throws(
+    () => buildMateRelation({ relationType: "SCREW", mates: [{ featureId: "C", dof: "Rz" }] }),
+    /distance per revolution/,
+  );
+  assert.throws(
+    () => buildMateRelation({ relationType: "LINEAR", mates: [], ratio: 0 }),
+    /positive ratio/,
+  );
+});
+
+test("mate values convert between inches and degrees and Onshape's metres and radians", () => {
+  assert.ok(Math.abs(mateValueFromUser("translationZ", 1) - 0.0254) < 1e-12);
+  assert.ok(Math.abs(mateValueFromUser("rotationZ", 90) - Math.PI / 2) < 1e-12);
+  assert.ok(Math.abs(mateValueToUser("translationX", 0.0127) - 0.5) < 1e-12);
+  assert.ok(Math.abs(mateValueToUser("rotationY", Math.PI) - 180) < 1e-12);
 });
 
 test("no parameter carries libraryRelationType", () => {
@@ -123,6 +290,8 @@ test("no parameter carries libraryRelationType", () => {
     buildOffsetPlane({}),
     buildRectangleSketch({ name: "S", plane: "Front", corner1: [0, 0], corner2: [1, 1] }),
     buildAssignVariable({ name: "wall", expression: "0.125 in" }),
+    buildAssemblyMate({ mateConnectors: ["a", "b"] }),
+    buildMateRelation({ relationType: "GEAR", mates: [{ featureId: "a", dof: "Rz" }] }),
   ];
   assert.equal(JSON.stringify(payloads).includes("libraryRelationType"), false);
 });
@@ -143,7 +312,14 @@ test("assignVariable writes the expression into the parameter for its type", () 
   assert.equal(parameter(length, "lengthValue").expression, "0.125 in");
   assert.equal(parameter(length, "description").value, "wall thickness");
 
+  // Regression: the feature name is a template, so "#wall = 0.125 in" showed
+  // as "? = 0.125 in" in the feature list. Onshape's own name, plus the hidden
+  // value parameter it displays, is what a Variable made in the UI carries.
+  assert.equal(length.feature.name, "###name = #value");
+  assert.equal(parameter(length, "value").expression, "0.125 in");
+
   const count = buildAssignVariable({ name: "turns", expression: "6" }) as any;
   assert.equal(parameter(count, "variableType").value, "NUMBER");
   assert.equal(parameter(count, "numberValue").expression, "6");
+  assert.equal(parameter(count, "value").expression, "6");
 });

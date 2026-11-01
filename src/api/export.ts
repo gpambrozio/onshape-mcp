@@ -11,6 +11,10 @@ import { isRecord } from "./util.js";
 /** Isometric camera (3x4 row-major view matrix). */
 export const ISO_VIEW = "0.707,0.707,0,0,-0.408,0.408,0.816,0,0.577,-0.577,0.577,0";
 
+/** Millimetres, not the inches used everywhere else: slicers read STL
+ *  coordinates as millimetres, so an inch STL prints 25.4x too small. */
+export const DEFAULT_STL_UNITS = "millimeter";
+
 export interface WrittenFile {
   path: string;
   bytes: number;
@@ -31,7 +35,7 @@ export class ExportManager {
       `/api/v6/partstudios/d/${documentId}/w/${workspaceId}/e/${elementId}/stl`,
       {
         mode: opts.binary === false ? "text" : "binary",
-        units: opts.units ?? "inch",
+        units: opts.units ?? DEFAULT_STL_UNITS,
         grouping: "true",
         scale: opts.scale ?? 1.0,
         resolution: opts.resolution ?? "medium",

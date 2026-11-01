@@ -33,19 +33,36 @@ import type { ToolDef } from "./types.js";
 
 const base = { ...targetShape, ...validateShape };
 
+/** How far an extrude or hole goes, shared by both tools. */
+const extrudeEndShape = {
+  end_type: z
+    .enum(["BLIND", "SYMMETRIC", "THROUGH_ALL"])
+    .optional()
+    .describe(
+      "BLIND goes `depth` along the sketch normal (default); SYMMETRIC goes `depth` in total, half each side of the " +
+        "sketch plane; THROUGH_ALL goes past every body and ignores `depth`.",
+    ),
+  opposite: z.boolean().optional().describe("Go against the sketch normal instead of along it. Not with SYMMETRIC."),
+};
+
 export const featureTools: ToolDef[] = [
   {
     name: "onshape_extrude",
     title: "Extrude a sketch",
     description:
       "Extrude the closed regions of a sketch into a solid. op=NEW makes a body, ADD merges into existing bodies, " +
-      "REMOVE cuts them, INTERSECT keeps the overlap.",
+      "REMOVE cuts them, INTERSECT keeps the overlap. end_type picks blind, symmetric or through-all; opposite " +
+      "flips the direction.",
     inputSchema: {
       ...base,
       name: nameShape("Extrude"),
       sketch: z.string().min(1).describe("Feature id of the sketch to extrude."),
-      depth: z.number().describe("Extrusion depth in inches."),
+      depth: z
+        .number()
+        .optional()
+        .describe("Extrusion depth in inches; the total depth when symmetric. Required unless THROUGH_ALL or depth_variable."),
       depth_variable: z.string().optional().describe("Use a Part Studio variable (by name) for the depth instead."),
+      ...extrudeEndShape,
       op: operationShape,
     },
     handler: (args, ctx) =>
@@ -56,19 +73,27 @@ export const featureTools: ToolDef[] = [
           depth: args.depth,
           operationType: args.op ?? "NEW",
           depthVariable: args.depth_variable,
+          end: args.end_type,
+          opposite: args.opposite,
         }),
       ),
   },
   {
     name: "onshape_hole",
     title: "Cut a hole",
-    description: "Extrude a sketch as a cut (op=REMOVE). Sketch a circle first, then cut it through the body.",
+    description:
+      "Extrude a sketch as a cut (op=REMOVE). Sketch a circle first, then cut it through the body: end_type " +
+      "THROUGH_ALL needs no depth. A sketch on a body's face points out of the body, so pass opposite to cut into it.",
     inputSchema: {
       ...base,
       name: nameShape("Hole"),
       sketch: z.string().min(1).describe("Feature id of the sketch to cut with."),
-      depth: z.number().describe("Cut depth in inches; make it deeper than the body to cut through."),
+      depth: z
+        .number()
+        .optional()
+        .describe("Cut depth in inches; the total depth when symmetric. Required unless THROUGH_ALL or depth_variable."),
       depth_variable: z.string().optional().describe("Use a Part Studio variable for the depth."),
+      ...extrudeEndShape,
     },
     handler: (args, ctx) =>
       addPartStudioFeature(ctx, args, () =>
@@ -78,6 +103,8 @@ export const featureTools: ToolDef[] = [
           depth: args.depth,
           operationType: "REMOVE",
           depthVariable: args.depth_variable,
+          end: args.end_type,
+          opposite: args.opposite,
         }),
       ),
   },
