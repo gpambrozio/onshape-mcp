@@ -399,6 +399,13 @@ test("an assembly feature that regenerates with ERROR fails validation", async (
   await assert.rejects(assemblies.validateFeature("D", "W", "E", "MBAD"), /MBAD regenerated with status ERROR/);
 });
 
+test("an assembly feature with no featureStatus cannot be verified", async () => {
+  const { client } = fakeClient(() => ({ featureStates: { MSTATELESS: {} } }));
+  const assemblies = new AssemblyManager(client);
+  await assert.rejects(assemblies.validateFeature("D", "W", "E", "MSTATELESS"), /Cannot verify regeneration: assembly feature MSTATELESS/);
+  await assert.rejects(assemblies.validateFeature("D", "W", "E", "MMISSING"), /Cannot verify regeneration/);
+});
+
 /** An assembly with these features, where a new feature regenerates as
  *  `status`. */
 function relationAssembly(features: unknown[], status = "OK") {

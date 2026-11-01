@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `onshape_update_feature` now checks regeneration after the edit, as the add
+  tools do. It fails when the edited feature is in ERROR or has no status, or
+  when the edit put another feature into ERROR. It reads the feature states
+  before the edit as well, so errors that were already there do not fail it;
+  they are listed in `validation.preexistingErrors`. It takes `validate: false`
+  to skip both reads.
+- Part Studio feature writes say what was applied: add tools reply with
+  `creationApplied: true` and `onshape_update_feature` with
+  `updateApplied: true`, also when the regeneration check fails, since that
+  does not undo the write. `validate: false` is reported as
+  `validationSkipped: true`.
+- A large feature-write reply keeps the feature id and validation outcome
+  inline and saves only the full response to `saved_to`. If that file cannot be
+  written, `responseStorageError` says so and the write is still reported as
+  done rather than failed.
+- An add tool now fails, rather than passes, when it cannot verify
+  regeneration because the response has no feature id or the feature has no
+  `featureStatus`. Assembly feature tools fail on a missing `featureStatus` too.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added
