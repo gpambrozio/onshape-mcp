@@ -186,21 +186,32 @@ export const partStudioTools: ToolDef[] = [
     title: "Update a feature",
     description:
       "Replace an existing feature's payload, e.g. to change a dimension. Post the whole feature JSON. " +
-      "Re-read regeneration state afterwards, including errors in other features. A validation failure does not undo the edit. " +
+      "Unless validate is false, re-read regeneration state afterwards and fail if the edited feature is in ERROR " +
+      "or the edit put another feature into ERROR. Errors that were already there before the edit are listed in " +
+      "validation.preexistingErrors without failing. A validation failure does not undo the edit. " +
       "The feature id, updateApplied flag and validation outcome remain inline even when the API response is saved to disk.",
     inputSchema: {
       ...targetShape,
       feature_id: z.string().min(1).describe("Id of the feature to replace."),
       feature: z.record(z.string(), z.any()).describe("The full replacement feature JSON."),
+      ...validateShape,
     },
     handler: async (args, ctx) => {
       try {
         const t = requireTarget(args);
         const api = ctx.api().partStudios;
+        const validate = args.validate !== false;
+        // The baseline is read before the POST so that errors the edit did not
+        // cause don't fail it. If this read fails, nothing has been written yet.
+        const errorsBefore = validate ? await api.erroredFeatures(t.doc, t.ws, t.elem) : undefined;
         const response = await api.updateFeature(t.doc, t.ws, t.elem, args.feature_id, args.feature);
         const summary: FeatureWriteSummary = { featureId: args.feature_id, updateApplied: true };
+        if (!validate) {
+          summary.validationSkipped = true;
+          return featureWriteResult(ctx, summary, response);
+        }
         try {
-          summary.validation = await api.validateFeature(t.doc, t.ws, t.elem, args.feature_id, true);
+          summary.validation = await api.validateFeature(t.doc, t.ws, t.elem, args.feature_id, errorsBefore);
         } catch (error) {
           // The POST has already completed. Make that explicit so a caller does
           // not mistake a verification failure for an edit that never happened.

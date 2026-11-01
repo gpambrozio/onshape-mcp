@@ -105,7 +105,9 @@ Worth knowing:
   millimetres by default because that is what slicers assume.
 - **Feature tools validate by default.** Onshape answers `200` for a feature
   that fails to regenerate, so each tool re-reads the feature state and fails
-  loudly instead. Pass `validate: false` to skip it.
+  loudly instead. `update_feature` also fails when the edit puts another
+  feature into ERROR; errors that were already there before the edit are listed
+  in `validation.preexistingErrors` instead. Pass `validate: false` to skip it.
 - **Assemblies:** `assembly_mate` joins Part Studio mate connectors directly
   (`{path: [instance id], connector: "FabC_0.mcPinion"}`, as `get_assembly`
   lists them), `insert_instance` takes `fixed: true` to ground an instance, and
@@ -119,7 +121,7 @@ Worth knowing:
   Large replies retain the feature ID and validation outcome inline, with the
   full response in `saved_to`. If that file cannot be saved, `responseStorageError`
   reports the storage problem without changing the write/validation outcome.
-  `validate: false` on creation is reported as `validationSkipped: true`.
+  `validate: false` is reported as `validationSkipped: true`.
 - **Renders come back as images.** `shaded_view` and `get_thumbnail` return the
   PNG inline as well as writing it, so the model can see the part.
 - **Big reads spill to disk.** Anything over `ONSHAPE_MCP_MAX_RESPONSE_BYTES`

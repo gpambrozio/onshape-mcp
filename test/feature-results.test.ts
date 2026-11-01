@@ -31,7 +31,7 @@ for (const operation of ["create", "update"] as const) {
             return storage === "write-failure" ? dir : join(dir, name);
           },
           api: () => ({ partStudios: {
-            addFeature: post, updateFeature: post,
+            addFeature: post, updateFeature: post, erroredFeatures: async () => [],
             validateFeature: async () => {
               calls.push("GET");
               if (validationFails) throw new Error("validation read failed");
@@ -74,7 +74,7 @@ for (const operation of ["create", "update"] as const) {
     let verified = false;
     const post = async () => { throw new Error("POST failed"); };
     const ctx = { api: () => ({ partStudios: {
-      addFeature: post, updateFeature: post,
+      addFeature: post, updateFeature: post, erroredFeatures: async () => [],
       validateFeature: async () => { verified = true; return validation; },
     } }) } as unknown as ToolContext;
     const result = await run(ctx);
@@ -84,19 +84,26 @@ for (const operation of ["create", "update"] as const) {
   });
 }
 
-test("skipping add validation remains explicit in the compact response", async () => {
-  const ctx = {
-    maxResponseBytes: 100,
-    resolveOutputPath: () => { throw new Error("no output directory"); },
-    api: () => ({ partStudios: {
-      addFeature: async () => response,
-      validateFeature: async () => { throw new Error("must not validate"); },
-    } }),
-  } as unknown as ToolContext;
-  const result = await addPartStudioFeature(ctx, { ...args, validate: false }, () => ({}));
-  const payload = JSON.parse(String(result.content[0].text));
-  assert.equal(payload.ok, true);
-  assert.equal(payload.result.creationApplied, true);
-  assert.equal(payload.result.validationSkipped, true);
-  assert.equal(payload.result.validation, undefined);
-});
+for (const operation of ["create", "update"] as const) {
+  test(`${operation}: skipping validation remains explicit in the compact response`, async () => {
+    const mustNotRead = async () => { throw new Error("must not validate"); };
+    const ctx = {
+      maxResponseBytes: 100,
+      resolveOutputPath: () => { throw new Error("no output directory"); },
+      api: () => ({ partStudios: {
+        addFeature: async () => response,
+        updateFeature: async () => response,
+        validateFeature: mustNotRead,
+        erroredFeatures: mustNotRead,
+      } }),
+    } as unknown as ToolContext;
+    const result = operation === "create"
+      ? await addPartStudioFeature(ctx, { ...args, validate: false }, () => ({}))
+      : await update.handler({ ...args, validate: false }, ctx);
+    const payload = JSON.parse(String(result.content[0].text));
+    assert.equal(payload.ok, true);
+    assert.equal(payload.result[operation === "create" ? "creationApplied" : "updateApplied"], true);
+    assert.equal(payload.result.validationSkipped, true);
+    assert.equal(payload.result.validation, undefined);
+  });
+}

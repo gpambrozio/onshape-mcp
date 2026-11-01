@@ -11,6 +11,17 @@ const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
 export interface FeatureValidation {
   featureId: string;
   featureStatus: string;
+  /** Other features that were already in ERROR before the write and still
+   *  are. Reported, not failed on: the write did not cause them. */
+  preexistingErrors?: string[];
+}
+
+/** Ids of the features whose state is ERROR in a `/features` response. */
+function erroredFeatureIds(features: unknown): string[] {
+  const states = isRecord(features) && isRecord(features.featureStates) ? features.featureStates : {};
+  return Object.entries(states)
+    .filter(([, value]) => isRecord(value) && value.featureStatus === "ERROR")
+    .map(([id]) => id);
 }
 
 /** A body named by its part id, or by the feature that created it. */
@@ -191,14 +202,26 @@ export class PartStudioManager {
     };
   }
 
+  /** Ids of the features currently in ERROR: the baseline an update compares
+   *  against, so it fails only on errors it introduced. */
+  async erroredFeatures(documentId: string, workspaceId: string, elementId: string): Promise<string[]> {
+    return erroredFeatureIds(await this.getFeatures(documentId, workspaceId, elementId));
+  }
+
   /** A feature that regenerates with status ERROR is a failure, even though the
-   *  POST that created it returned 200. */
+   *  POST that created it returned 200.
+   *
+   *  With `errorsBefore` (from erroredFeatures, read before the write), other
+   *  features are checked too: editing an earlier sketch can break a later
+   *  solid feature while the sketch itself remains OK. Only errors absent from
+   *  the baseline fail; the ones that were already there come back as
+   *  `preexistingErrors`. */
   async validateFeature(
     documentId: string,
     workspaceId: string,
     elementId: string,
     featureId: string,
-    checkOtherFeatures = false,
+    errorsBefore?: readonly string[],
   ): Promise<FeatureValidation> {
     const features = await this.getFeatures(documentId, workspaceId, elementId);
     const states = isRecord(features) && isRecord(features.featureStates) ? features.featureStates : {};
@@ -206,15 +229,16 @@ export class PartStudioManager {
     const status = typeof state.featureStatus === "string" ? state.featureStatus : null;
     if (!status) throw new Error(`Cannot verify regeneration: feature ${featureId} has no featureStatus.`);
     if (status === "ERROR") throw new Error(`Feature ${featureId} regenerated with status ERROR.`);
-    // Editing an earlier sketch can break a later solid feature while the
-    // sketch itself remains OK. Inspect the same snapshot for those failures.
-    if (checkOtherFeatures) {
-      const failed = Object.entries(states)
-        .filter(([, value]) => isRecord(value) && value.featureStatus === "ERROR")
-        .map(([id]) => id);
-      if (failed.length) throw new Error(`Part Studio contains regeneration errors: ${failed.join(", ")}.`);
+    const result: FeatureValidation = { featureId, featureStatus: status };
+    if (errorsBefore) {
+      const baseline = new Set(errorsBefore);
+      const others = erroredFeatureIds(features).filter(id => id !== featureId);
+      const introduced = others.filter(id => !baseline.has(id));
+      if (introduced.length) throw new Error(`Part Studio has new regeneration errors: ${introduced.join(", ")}.`);
+      const preexisting = others.filter(id => baseline.has(id));
+      if (preexisting.length) result.preexistingErrors = preexisting;
     }
-    return { featureId, featureStatus: status };
+    return result;
   }
 
   async validatePartStudio(
